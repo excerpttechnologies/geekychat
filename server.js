@@ -284,12 +284,12 @@ app.put("/update-template/:name", upload.single("file"), async (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Fallback route for SPA (React Router)
+Fallback route for SPA (React Router)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 // Server start
 app.listen(process.env.PORT || 8002, () => {
-  console.log(`Server running on port ${process.env.PORT || 8080}`);
+  console.log(`Server running on port ${process.env.PORT || 8002}`);
 });
