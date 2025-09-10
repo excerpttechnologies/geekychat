@@ -284,7 +284,7 @@ app.put("/update-template/:name", upload.single("file"), async (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'dist')));
 
-Fallback route for SPA (React Router)
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
