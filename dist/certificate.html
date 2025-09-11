@@ -1,0 +1,392 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificate Details</title>
+    <style>
+        /* Add your styles here */
+        .container {
+            margin: auto;
+        }
+
+        .card {
+            margin-bottom: 20px;
+        }
+
+        .profile_img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            margin-bottom: 10px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .card-header {
+            padding: 10px;
+            background-color: #f0f0f0;
+        }
+
+        .table {
+            width: 100%;
+            margin-bottom: 0;
+        }
+
+        .table th,
+        .table td {
+            padding: 8px;
+            vertical-align: top;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .table-bordered {
+            border: 1px solid #dee2e6;
+        }
+
+        h2 {
+            font-size: 24px;
+            color: #333;
+        }
+
+        h3 {
+            font-size: 20px;
+            color: #555;
+        }
+
+        label {
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <img src="./favicon.png" style="width: 260px; margin-left: 120px; margin-top: 10px;">
+        <h2 style="margin-left: 520px; margin-top: -70px;">ITDESK  </h2>
+        <p style="margin-left: 520px; font-size: 22px;">2nd Floor, B133/1, KSSIDC
+            ITI Estate, Whitefield Road,
+             Post Bangalore,
+            Karnataka-560048</p>
+    </header>
+
+    <div class="container" style="width: 1100px; margin-top: 140px;">
+        <div class="row">
+            <div class="col-lg-4" style="margin-top: -100px;">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-transparent text-center">
+                        <b>
+                            <h3 id="studentName">Student Name</h3>
+                        </b>
+                    </div>
+
+                    <div class="card-body">
+                        <form>
+                            <label for="regNo">Registration Number:</label>
+                            <input type="text" id="regNo" name="regNo" class="form-control mb-2">
+                            <label for="fatherName">Father's Name:</label>
+                            <input type="text" id="fatherName" name="fatherName" class="form-control mb-2" disabled>
+
+                            <label for="collegeName">College Name:</label>
+                            <input type="text" id="collegeName" name="collegeName" class="form-control mb-2" disabled>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8" style="margin-top: -100px;">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-transparent border-0">
+                        <h3 class="mb-0"><i class="far fa-clone pr-1"></i>General Information</h3>
+                    </div>
+                    <div class="card-body pt-0">
+                        <table class="table table-bordered">
+                            <tr>
+                                <th width="30%">College name</th>
+                                <td width="2%">:</td>
+                                <td id="collegeName"></td>
+                            </tr>
+                            <tr>
+                                <th width="30%">Academic Year</th>
+                                <td width="2%">:</td>
+                                <td id="yop"></td>
+                            </tr>
+                            <tr>
+                                <th width="30%">Course</th>
+                                <td width="2%">:</td>
+                                <td id="Course"></td>
+                                <td></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div style="font-size: 18px; margin-left: 30px;">
+                <p><b>"He/she successfully completed their Course at ITDESK , demonstrating exceptional
+                        dedication and skill. Their contributions significantly enriched our projects and team dynamics,
+                        showcasing their potential for future success in the industry."</b></p>
+            </div>
+        </div>
+    </div>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+        integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous" />
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+        integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"
+        integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN"
+        crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"
+        integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV"
+        crossorigin="anonymous"></script>
+    <script src="https://kit.fontawesome.com/5f59ca6ad3.js" crossorigin="anonymous"></script>
+
+    <script>
+    
+        async function fetchStudentDetails(REG_NO) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/students?REG_NO=${REG_NO}`);
+                const data = await response.json();
+                const student = data.find(student => student.REG_NO === REG_NO); 
+                if (student) {
+             
+                    document.getElementById('studentName').innerText = student.NAME;
+                    document.getElementById('fatherName').value = student.FATHER_NAME;
+                    document.getElementById('Course').textContent = student.coursename;
+                    document.getElementById('collegeName').textContent = student.college_name;
+                    document.getElementById('yop').textContent = student.yop;
+                } else {
+                    console.error('Student not found with registration number:', REG_NO);
+                }
+            } catch (error) {
+                console.error('Error fetching student details:', error);
+            }
+        }
+
+       
+        function getRegistrationNumberFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const REG_NO = urlParams.get('REG_NO');
+            return REG_NO;
+        }
+
+
+        async function updateFormWithStudentDetails() {
+            const REG_NO = getRegistrationNumberFromURL();
+            if (REG_NO) {
+                fetchStudentDetails(REG_NO);
+                document.getElementById('section').value = REG_NO;
+            }
+        }
+
+       
+        updateFormWithStudentDetails();
+    </script>
+
+</body>
+
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificate Details</title>
+    <style>
+        /* Add your styles here */
+        .container {
+            margin: auto;
+        }
+
+        .card {
+            margin-bottom: 20px;
+        }
+
+        .profile_img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            margin-bottom: 10px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .card-header {
+            padding: 10px;
+            background-color: #f0f0f0;
+        }
+
+        .table {
+            width: 100%;
+            margin-bottom: 0;
+        }
+
+        .table th,
+        .table td {
+            padding: 8px;
+            vertical-align: top;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .table-bordered {
+            border: 1px solid #dee2e6;
+        }
+
+        h2 {
+            font-size: 24px;
+            color: #333;
+        }
+
+        h3 {
+            font-size: 20px;
+            color: #555;
+        }
+
+        label {
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <img src="./favicon.png" style="width: 260px; margin-left: 120px; margin-top: 10px;">
+        <h2 style="margin-left: 520px; margin-top: -70px;">EXCERPT TRAININGS </h2>
+        <p style="margin-left: 520px; font-size: 22px;">2nd Floor, B133/1, KSSIDC
+            ITI Estate, Whitefield Road,
+             Post Bangalore,
+            Karnataka-560048</p>
+    </header>
+
+    <div class="container" style="width: 1100px; margin-top: 140px;">
+        <div class="row">
+            <div class="col-lg-4" style="margin-top: -100px;">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-transparent text-center">
+
+                        <b>
+                            <h3 id="studentName">Student Name</h3>
+                        </b>
+                    </div>
+
+                    <div class="card-body">
+                        <form>
+                            <label for="fatherName">Father's Name:</label>
+                            <input type="text" id="fatherName" name="fatherName" class="form-control mb-2" value=""
+                                disabled>
+
+
+
+                            <label for="section">Reg No:</label>
+                            <input type="text" id="section" name="section" class="form-control mb-2" disabled>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8" style="margin-top: -100px;">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-transparent border-0">
+                        <h3 class="mb-0"><i class="far fa-clone pr-1"></i>General Information</h3>
+                    </div>
+                    <div class="card-body pt-0">
+                        <table class="table table-bordered">
+                            <tr>
+                                <th width="30%">College name</th>
+                                <td width="2%">:</td>
+                                <td id="collegeName"></td>
+                            </tr>
+                            <tr>
+                                <th width="30%">Academic Year</th>
+                                <td width="2%">:</td>
+                                <td id="yop"></td>
+                            </tr>
+                            <tr>
+                                <th width="30%">Course</th>
+                                <td width="2%">:</td>
+                                <td id="Course"></td>
+                                <td></td>
+                            </tr>
+
+                            </tr>
+                        </table>
+                    </div>
+
+                </div>
+
+            </div>
+            <div style="font-size: 18px; margin-left: 30px;">
+                <p><b>"He/she successfully completed their Project at "ITDESK ", demonstrating exceptional
+                        dedication and skill. Their contributions significantly enriched our projects and team dynamics,
+                        showcasing their potential for future success in the industry."</b></p>
+            </div>
+        </div>
+    </div>
+
+
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+        integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous" />
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+        integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"
+        integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN"
+        crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"
+        integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV"
+        crossorigin="anonymous"></script>
+    <script src="https://kit.fontawesome.com/5f59ca6ad3.js" crossorigin="anonymous"></script>
+
+
+    <script>
+
+        async function fetchStudentDetails(REG_NO) {
+            try {
+                const response = await fetch(`/api/students?REG_NO=${REG_NO}`);
+                const data = await response.json();
+                const student = data.find(student => student.REG_NO === REG_NO);
+                if (student) {
+
+                    document.getElementById('studentName').innerText = student.NAME;
+                    document.getElementById('fatherName').value = student.FATHER_NAME;
+                    document.getElementById('Course').textContent = student.coursename;
+                    document.getElementById('collegeName').textContent = student.college_name;
+                    document.getElementById('yop').textContent = student.yop;
+                } else {
+                    console.error('Student not found with registration number:', REG_NO);
+                }
+            } catch (error) {
+                console.error('Error fetching student details:', error);
+            }
+        }
+
+
+        function getRegistrationNumberFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const REG_NO = urlParams.get('REG_NO');
+            return REG_NO;
+        }
+
+
+        async function updateFormWithStudentDetails() {
+            const REG_NO = getRegistrationNumberFromURL();
+            if (REG_NO) {
+                fetchStudentDetails(REG_NO);
+                document.getElementById('section').value = REG_NO;
+            }
+        }
+
+
+        updateFormWithStudentDetails();
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,265 @@
+/* MAX 1024px */
+@media only screen and (max-width: 1024px) {
+    #inner {
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+
+    .container-fluid,
+    .row {
+        padding: 0 0;
+        margin: 0px;
+    }
+}
+
+@media only screen and (max-width: 980px) {
+
+    .sec7:after,
+    .highlight-row:after,
+    .loader,
+    .resp-tabs-img,
+    .dsu-addmission h1:after {
+        display: none !important;
+    }
+
+    .sec2,
+    .sec4,
+    .sec6 {
+        display: block;
+    }
+
+    .sec6 {
+        margin-top: 30px;
+    }
+
+    .student_Bx {
+        padding-top: 0;
+        width: 100%;
+    }
+
+    .partnerBox,
+    .about-left {
+        width: 100%;
+    }
+
+    .about-rigth {
+        width: 100%;
+        text-align: center;
+        margin-top: 30px;
+    }
+
+    .record-item {
+        width: 50%;
+        text-align: center;
+        margin-top: 20px;
+    }
+
+    .highlight-item {
+        padding-top: 0;
+        width: 100%;
+        padding-left: 0;
+        height: auto;
+    }
+
+    .highlight-row {
+        height: auto;
+    }
+
+    #client-slider.owl-theme .owl-nav .owl-prev,
+    #partnerships-slider.owl-theme .owl-nav .owl-prev {
+        left: 0px;
+    }
+
+    #client-slider.owl-theme .owl-nav .owl-next,
+    #partnerships-slider.owl-theme .owl-nav .owl-next {
+        right: 0px;
+    }
+
+    .sec7Head #verticalTab .resp-tab-content .resp-tabs-row .resp-tabs-item {
+        width: 100%;
+        left: 0;
+        height: auto;
+        background: #44733f;
+        background: -moz-linear-gradient(left, #44733f 0%, #9bb52c 50%, #e3eb1c 100%);
+        background: -webkit-linear-gradient(left, #44733f 0%, #9bb52c 50%, #e3eb1c 100%);
+        background: linear-gradient(to right, #44733f 0%, #9bb52c 50%, #e3eb1c 100%);
+        filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#44733f', endColorstr='#e3eb1c', GradientType=1);
+    }
+
+    .sec7Head {
+        box-shadow: none;
+    }
+
+    #student-speak.owl-theme .owl-nav .owl-next {
+        right: 0;
+    }
+
+    #student-speak.owl-theme .owl-nav .owl-prev {
+        left: 0px;
+    }
+
+    #student-speak.owl-theme .owl-nav [class*=owl-] {
+        position: relative;
+        top: 0px;
+        background-color: #000000;
+        color: #FFF;
+        padding: 0 13px;
+    }
+
+    .photo {
+        text-align: center;
+    }
+
+    .photo img {
+        float: none;
+        margin-right: 0;
+    }
+
+    .student_text {
+        height: auto;
+    }
+
+    .applyBox,
+    .dsu-form {
+        float: none;
+        margin: 0 auto;
+        height: auto;
+    }
+
+    .dsu-intro #inner .col-sm-4 {
+        width: 100%;
+    }
+
+    .dsu-addmission {
+        margin-top: 1%;
+        display: block;
+        text-align: center;
+    }
+
+    .bc-img01 {
+        background-size: cover;
+        height: 716px;
+    }
+
+    .leftsec_content {
+        width: 100%;
+    }
+
+    .topborder-block {
+        left: 0px;
+    }
+
+    /* .dsu-form {} */
+}
+
+@media only screen and (max-width: 736px) {}
+
+@media only screen and (max-width: 568px) {
+    .logo_right_area span {
+        font-size: 18px;
+        line-height: 18px;
+    }
+
+    .topborder-block .col-sm-3.col-xs-6 {
+        width: 50%;
+        border: 2px solid #e5ec1c;
+    }
+
+    .bc-img01 {
+        height: 800px;
+    }
+
+
+}
+
+@media only screen and (max-width: 480px) {
+    .dsu-addmission h1 strong {
+        font-size: 40px;
+    }
+
+    .logo {
+        width: 100%;
+        text-align: center;
+    }
+
+    .logo_right_area {
+        width: 100%;
+        text-align: center;
+        padding-top: 8px;
+    }
+
+    .course1 {
+        display: none;
+    }
+}
+
+
+@media only screen and (max-width: 414px) {
+    .logo_right_area span {
+        font-size: 13px;
+        line-height: 12px;
+    }
+
+    .dsu-addmission h1 {
+        font-size: 24px;
+    }
+
+    .dsu-addmission h1 strong {
+        font-size: 30px;
+    }
+
+    .record-item {
+        width: 100%;
+    }
+
+    .about-rigth img {
+        width: 100%;
+    }
+
+    .text-center-item img+img {
+        margin-top: 0px;
+    }
+
+    #client-slider.owl-theme .owl-nav [class*=owl-] {
+        top: -32px;
+    }
+}
+
+@media only screen and (max-width: 360px) {
+
+    .applyBox,
+    .dsu-form {
+        width: 100%;
+    }
+
+    .topborder-block .col-sm-3.col-xs-6 {
+        text-align: center;
+        width: 100%;
+        height: auto;
+    }
+
+    .dsu-addmission h1 {
+        font-size: 20px;
+        line-height: 26px;
+    }
+
+    .dsu-addmission h1 strong {
+        font-size: 24px;
+    }
+
+    h2.resp-accordion small {
+        display: block;
+    }
+
+    .text-center-item img+img {
+        margin-top: 10px;
+    }
+
+    .bc-img01 {
+        height: 909px;
+    }
+
+    .widget-title h3 {
+        font-size: 24px;
+    }
+}
