@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const Campaign = require("./models/Campigns");
 require("dotenv").config();
+const xlsx = require("xlsx");
 
 const multer = require("multer");
 const axios = require("axios");
@@ -68,6 +69,12 @@ app.get('/api/campaigns/detailed', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch campaigns' });
   }
 });
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("DB connection error:", err));
+
+const upload = multer({ dest: "uploads/" });
 // Routes usage
 app.use("/api/auth", authRoutes);
 app.use("/api/Users", userRoutes);
@@ -77,12 +84,7 @@ app.use("/api/messageLogs", messageLogsRoutes);
 app.use("/api/campaignLogs", campaignLogsRoute);
 app.use("/api/campaigns", campaignRoutes);
 // DB connection
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("DB connection error:", err));
 
-const upload = multer({ dest: "uploads/" });
 
 // 🔑 Meta config (move these to .env in production)
 const accessToken = process.env.ACCESS_TOKEN;
@@ -2439,6 +2441,198 @@ app.get('/api/webhook-data', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+const getDateRange = (startDate, endDate) => {
+    const start = startDate ? new Date(startDate) : new Date();
+    start.setHours(0, 0, 0, 0);
+    
+    const end = endDate ? new Date(endDate) : new Date();
+    end.setHours(23, 59, 59, 999);
+    
+    return { start, end };
+};
+
+// Helper function to extract message status from webhook data
+const getMessageStatus = (rawData) => {
+    try {
+        // Check for WhatsApp webhook status updates
+        if (rawData.entry && rawData.entry[0] && rawData.entry[0].changes) {
+            const change = rawData.entry[0].changes[0];
+            if (change.value && change.value.statuses) {
+                return change.value.statuses[0].status; // sent, delivered, read, failed
+            }
+        }
+        
+        // Check for message sending attempts
+        if (rawData.messages) {
+            return 'sent';
+        }
+        
+        // Check for errors
+        if (rawData.error || (rawData.rawData && rawData.rawData.error)) {
+            return 'failed';
+        }
+        
+        return 'unknown';
+    } catch (error) {
+        return 'unknown';
+    }
+};
+
+// Helper function to extract phone number
+// Helper function to extract phone number (UPDATED - now gets display phone number)
+const getPhoneNumber = (rawData) => {
+    try {
+        if (rawData.entry && rawData.entry[0] && rawData.entry[0].changes) {
+            const change = rawData.entry[0].changes[0];
+            if (change.value && change.value.metadata && change.value.metadata.display_phone_number) {
+                // Return the display phone number (sender's WhatsApp Business number)
+                return change.value.metadata.display_phone_number;
+            }
+        }
+        
+        // Fallback: From direct message data (if structure is different)
+        if (rawData.from) {
+            return rawData.from;
+        }
+        
+        // Another fallback for different webhook structures
+        if (rawData.display_phone_number) {
+            return rawData.display_phone_number;
+        }
+        
+        return null;
+    } catch (error) {
+        return null;
+    }
+};
+
+// Main analytics API endpoint (UPDATED)
+app.get('/api/analytics', async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const { start, end } = getDateRange(startDate, endDate);
+        
+        // Base query for date range
+        const baseQuery = {
+            timestamp: { $gte: start, $lte: end }
+        };
+        
+        // Get all webhook data for the period
+        const webhookData = await WebhookData.find(baseQuery).lean();
+        
+        // Process the data
+        let totalSent = 0;
+        let totalFailed = 0;
+        let totalDelivered = 0;
+        let totalRead = 0;
+        const phoneNumbers = new Set();
+        const dailyStats = {};
+        const phoneNumberStats = {};
+        
+        webhookData.forEach(record => {
+            const status = getMessageStatus(record.rawData);
+            const phoneNumber = getPhoneNumber(record.rawData);
+            const date = record.timestamp.toISOString().split('T')[0];
+            
+            // Track phone numbers (now tracking sender numbers)
+            if (phoneNumber) {
+                phoneNumbers.add(phoneNumber);
+                
+                // Phone number specific stats
+                if (!phoneNumberStats[phoneNumber]) {
+                    phoneNumberStats[phoneNumber] = {
+                        sent: 0,
+                        failed: 0,
+                        delivered: 0,
+                        read: 0
+                    };
+                }
+            }
+            
+            // Daily stats initialization
+            if (!dailyStats[date]) {
+                dailyStats[date] = {
+                    sent: 0,
+                    failed: 0,
+                    delivered: 0,
+                    read: 0
+                };
+            }
+            
+            // Count by status
+            switch (status) {
+                case 'sent':
+                    totalSent++;
+                    dailyStats[date].sent++;
+                    if (phoneNumber) phoneNumberStats[phoneNumber].sent++;
+                    break;
+                case 'failed':
+                    totalFailed++;
+                    dailyStats[date].failed++;
+                    if (phoneNumber) phoneNumberStats[phoneNumber].failed++;
+                    break;
+                case 'delivered':
+                    totalDelivered++;
+                    dailyStats[date].delivered++;
+                    if (phoneNumber) phoneNumberStats[phoneNumber].delivered++;
+                    break;
+                case 'read':
+                    totalRead++;
+                    dailyStats[date].read++;
+                    if (phoneNumber) phoneNumberStats[phoneNumber].read++;
+                    break;
+            }
+        });
+        
+        // Prepare daily chart data
+        const chartData = Object.keys(dailyStats).sort().map(date => ({
+            date,
+            sent: dailyStats[date].sent,
+            failed: dailyStats[date].failed,
+            delivered: dailyStats[date].delivered,
+            read: dailyStats[date].read
+        }));
+        
+        // Prepare phone number breakdown (now shows sender numbers with their message counts)
+        const phoneNumberBreakdown = Object.keys(phoneNumberStats).map(phone => ({
+            phoneNumber: phone,
+            ...phoneNumberStats[phone],
+            total: phoneNumberStats[phone].sent + phoneNumberStats[phone].failed + 
+                   phoneNumberStats[phone].delivered + phoneNumberStats[phone].read
+        })).sort((a, b) => b.total - a.total);
+        
+        // Calculate success rate
+        const totalMessages = totalSent + totalFailed + totalDelivered + totalRead;
+        const successRate = totalMessages > 0 ? ((totalSent + totalDelivered + totalRead) / totalMessages * 100).toFixed(2) : 0;
+        
+        res.json({
+            summary: {
+                totalSent,
+                totalFailed,
+                totalDelivered,
+                totalRead,
+                totalMessages,
+                uniquePhoneNumbers: phoneNumbers.size,
+                successRate: parseFloat(successRate)
+            },
+            chartData,
+            phoneNumberBreakdown,
+            dateRange: {
+                start: start.toISOString().split('T')[0],
+                end: end.toISOString().split('T')[0]
+            }
+        });
+        
+    } catch (error) {
+        console.error('Analytics API error:', error);
+        res.status(500).json({ 
+            error: 'Internal server error', 
+            details: error.message 
+        });
+    }
+});
+
+
 
 // API endpoint to get a specific webhook data entry
 app.get('/api/webhook-data/:id', async (req, res) => {
@@ -2502,6 +2696,80 @@ app.delete('/api/webhook-data/:id', async (req, res) => {
     }
 });
 // Add these new API endpoints to your existing Express server
+
+const contactSchema = new mongoose.Schema({
+  firstName: String,
+  lastName: String,
+  phone: String,
+});
+
+const Contact = mongoose.model("Contact", contactSchema);
+
+// Save single contact
+app.post("/save-contact", async (req, res) => {
+  try {
+    const { firstName, lastName, phone } = req.body;
+    const newContact = new Contact({ firstName, lastName, phone });
+    await newContact.save();
+    res.json({ message: "Contact saved successfully!" });
+  } catch (err) {
+    res.status(500).json({ message: "Error saving contact" });
+  }
+});
+
+// File upload config
+
+
+// Upload Excel/CSV
+app.post("/upload-contacts", upload.single("file"), async (req, res) => {
+  try {
+    const filePath = req.file.path;
+    const workbook = xlsx.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+console.log("condata",data)
+    // Save contacts
+    for (const row of data) {
+      if (row.firstName && row.phone) {
+        const contact = new Contact({
+          firstName: row.firstName,
+          lastName: row.lastName || "",
+          phone: row.phone,
+        });
+        await contact.save();
+      }
+    }
+
+    fs.unlinkSync(filePath); // cleanup
+    res.json({ message: "Contacts uploaded successfully!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error uploading contacts" });
+  }
+});
+
+// Fetch all contacts
+app.get("/contacts", async (req, res) => {
+  try {
+    const contacts = await Contact.find();
+    res.json(contacts);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching contacts" });
+  }
+});
+
+// Update a contact
+app.put("/contacts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, phone } = req.body;
+    await Contact.findByIdAndUpdate(id, { firstName, lastName, phone });
+    res.json({ message: "Contact updated successfully!" });
+  } catch (err) {
+    res.status(500).json({ message: "Error updating contact" });
+  }
+});
+
 app.use(history());
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -2512,5 +2780,5 @@ app.use(express.static(path.join(__dirname, 'dist')));
 
 // Server start
 app.listen(process.env.PORT || 8002, () => {
-  console.log(`Server running on port ${process.env.PORT || 8080}`);
+  console.log(`Server running on port ${process.env.PORT || 8002}`);
 });

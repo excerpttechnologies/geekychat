@@ -228,7 +228,7 @@ const multer = require('multer');
 const path = require('path');
 const User = require('../models/User');
 const axios = require('axios');
-
+const fs = require('fs');
 const router = express.Router();
 
 // Configure multer for file uploads
@@ -258,12 +258,12 @@ const upload = multer({
 });
 
 router.post('/register', async (req, res) => {
-  const { phone, password, firstname, lastname } = req.body;
+  const { phone, password, firstname, lastname ,email} = req.body;
   try {
     const existing = await User.findOne({ phone });
     if (existing) return res.status(400).json({ message: 'User already exists' });
 
-    const newUser = new User({ phone, password, firstName: firstname, lastName: lastname });
+    const newUser = new User({ phone, password, email,firstName: firstname, lastName: lastname });
     await newUser.save();
     res.status(201).json({ message: 'User registered' });
   } catch (err) {
@@ -307,8 +307,16 @@ router.post('/register', async (req, res) => {
 //     res.status(500).json({ message: 'Server error' });
 //   }
 // });
+router.get('/', async (req, res) => {
+  try {
+    const users = await User.find().sort({ createdAt: -1 });
+    res.json(users);
+    console.log("users",users);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
-// Get user details for verification page
 router.get('/user/:userId', async (req, res) => {
   try {
     const user = await User.findById(req.params.userId).select('-password');
@@ -320,6 +328,113 @@ router.get('/user/:userId', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+// Get all users
+
+// Approve user
+router.patch('/:userId/approve', async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.userId,
+      { isFullyVerified: true },
+      { new: true }
+    );
+    res.json({ message: 'User approved', user });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// View/Download documents
+// View documents - Enhanced with proper headers
+router.get('/documents/view', (req, res) => {
+  try {
+    const filePath = req.query.path;
+    
+    if (!filePath) {
+      return res.status(400).json({ message: 'File path is required' });
+    }
+
+    const absolutePath = path.resolve(filePath);
+    
+    // Check if file exists
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    // Get file extension to set proper content type
+    const ext = path.extname(absolutePath).toLowerCase();
+    let contentType = 'application/octet-stream';
+    
+    switch (ext) {
+      case '.pdf':
+        contentType = 'application/pdf';
+        break;
+      case '.jpg':
+      case '.jpeg':
+        contentType = 'image/jpeg';
+        break;
+      case '.png':
+        contentType = 'image/png';
+        break;
+      case '.gif':
+        contentType = 'image/gif';
+        break;
+    }
+
+    // Set proper headers for inline viewing
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', 'inline');
+    
+    // For PDF files, add additional headers to ensure proper display
+    if (ext === '.pdf') {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    }
+
+    res.sendFile(absolutePath);
+  } catch (error) {
+    console.error('Error viewing document:', error);
+    res.status(500).json({ message: 'Error viewing document' });
+  }
+});
+
+// Download documents - Enhanced with error handling
+router.get('/documents/download', (req, res) => {
+  try {
+    const filePath = req.query.path;
+    
+    if (!filePath) {
+      return res.status(400).json({ message: 'File path is required' });
+    }
+
+    const absolutePath = path.resolve(filePath);
+    
+    // Check if file exists
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    // Extract filename for download
+    const filename = path.basename(absolutePath);
+    
+    // Set headers for download
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    
+    res.download(absolutePath, filename, (err) => {
+      if (err) {
+        console.error('Download error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ message: 'Error downloading file' });
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error downloading document:', error);
+    res.status(500).json({ message: 'Error downloading document' });
+  }
+});
+// Get user details for verification page
+
 
 // Update user verification details
 router.post('/verify-user', upload.fields([
@@ -367,7 +482,7 @@ router.post('/verify-user', upload.fields([
                                req.files.agreementDocument;
 
     if (willBeFullyVerified) {
-      updateData.isFullyVerified = true;
+      // updateData.isFullyVerified = true;
       
       // Add 50 credits ONLY if user wasn't already verified
       if (!wasAlreadyVerified) {
@@ -385,7 +500,7 @@ router.post('/verify-user', upload.fields([
     
     res.status(200).json({
       message: message,
-      isFullyVerified: user.isFullyVerified,
+      // isFullyVerified: user.isFullyVerified,
       creditCoins: user.creditCoins,
       creditsAdded: willBeFullyVerified && !wasAlreadyVerified ? 50 : 0
     });
@@ -632,15 +747,65 @@ router.post('/resend-otp', async (req, res) => {
 });
 
 // Keep existing login route for password-based login
+// router.post('/login', async (req, res) => {
+//   try {
+//     const { phone, password,email } = req.body;
+
+//    const user = await User.findOne({
+//   $or: [
+//     { phone: phone },
+//     { email: email }
+//   ]
+// });
+
+//     if (!user) {
+//       return res.status(400).json({ message: 'User not found' });
+//     }
+
+//     if (user.password !== password) {
+//       return res.status(400).json({ message: 'Invalid credentials' });
+//     }
+
+//     // Check if user needs verification
+//     const needsVerification = !user.panVerification.isVerified ||
+//                               !user.address ||
+//                               !user.aadhaarDocument.fileName ||
+//                               !user.agreementDocument.fileName;
+
+//     res.json({
+//       message: 'Login successful',
+//       userId: user._id,
+//       needsVerification: needsVerification,
+//       user: {
+//         firstName: user.firstName,
+//         lastName: user.lastName,
+//         roles:user.roles,
+//         phone: user.phone,
+//         isFullyVerified: user.isFullyVerified,
+//         creditCoins: user.creditCoins
+//       }
+//     });
+//   } catch (error) {
+//     res.status(500).json({ message: 'Server error' });
+//   }
+// });
 router.post('/login', async (req, res) => {
   try {
-    const { phone, password } = req.body;
+    const { email, password } = req.body;
+    
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
 
-    const user = await User.findOne({ phone });
+    // Find user by email
+    const user = await User.findOne({ email: email });
+
     if (!user) {
       return res.status(400).json({ message: 'User not found' });
     }
 
+    // Check password
     if (user.password !== password) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -658,14 +823,16 @@ router.post('/login', async (req, res) => {
       user: {
         firstName: user.firstName,
         lastName: user.lastName,
+        roles: user.roles,
         phone: user.phone,
+        email: user.email,
         isFullyVerified: user.isFullyVerified,
         creditCoins: user.creditCoins
       }
     });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
-
 module.exports = router;

@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema({
   lastName: { type: String },
   phone: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-
+email:{type:String},
   // WhatsApp API details (optional per user)
   accessToken: { type: String, default: "" },
   apiVersion: { type: String, default: "v23.0" },
@@ -40,7 +40,7 @@ const userSchema = new mongoose.Schema({
 
   // Store created template IDs
   templates: [{ type: String }],
-
+roles:{type:String, default:'user'},
   // Additional verification fields
   address: { type: String, default: "" },
   gender: { 
