@@ -2143,7 +2143,7 @@ footer .bottom_footer .developer_text a {
     bottom: 75px;
     cursor: pointer;
     transition: .4s all;
-    opacity: 0;
+    opacity: 1;
 }
 
 .go_top:hover {
@@ -3606,8 +3606,11 @@ header.fix_style.white_header {
   .responsive_container{
      margin: 30px auto;
   }
-}
 
+  .banner_text{
+    margin-top: -50px !important;
+  }
+}
 
 
 
