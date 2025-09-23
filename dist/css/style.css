@@ -439,7 +439,7 @@ header.fix_style {
     top: 0;
     backdrop-filter: blur(5px);
     background-color: #ffffffb4;
-    padding: 15px 0;
+    /* padding: 15px 0; */
     transition: none;
     opacity: 0;
     pointer-events: none;
@@ -509,7 +509,8 @@ header.fixed .navbar {
 }
 
 .navbar-brand img {
-    width: 150px;
+    width: 120px;
+    height: 55px;
 }
 
 /* navigation bar dropdown */
@@ -2005,10 +2006,11 @@ footer {
 }
 
 footer .top_footer {
-    background-color: #583BD3;
-    padding: 180px 0 60px 0;
+    /* background-color: #583BD3; */
+    padding: 30px 0 10px 0;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 footer .top_footer.has_bg {
@@ -2091,10 +2093,10 @@ footer .bottom_footer {
 
 /* footer heading and text colors variable */
 
-footer h2,
-footer h3,
-footer p,
-footer a {
+footer ,
+footer ,
+footer ,
+footer  {
     color: var(--text-white);
 }
 
@@ -2109,6 +2111,7 @@ footer h3 {
     font-weight: 600;
     margin-bottom: 50px;
     padding-top: 10px;
+    color: #000;
 }
 
 footer .links ul li a {
