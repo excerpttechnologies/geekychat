@@ -239,7 +239,7 @@ button:focus,
 }
 
 .row_am {
-    padding: 50px 0;
+    padding: 20px 0;
 }
 
 /* purple button */
@@ -1743,7 +1743,7 @@ iframe#youtubevideo {
 }
 
 .free_app_section .container .free_app_inner {
-    background-color: var(--bg-purple);
+    background-color: #7c289c;
     border-radius: 30px;
     padding: 20px 100px;
     padding-bottom: 50px;
@@ -1834,7 +1834,7 @@ iframe#youtubevideo {
 /* latest story wraper */
 
 .latest_story {
-    margin-bottom: 80px;
+    margin-bottom: 0px;
 }
 
 /* latest story box */
@@ -2423,7 +2423,7 @@ footer .top_footer .anim_line span:nth-child(2) {
 }
 
 .bred_crumb {
-    background-image: url(https://kalanidhithemes.com/live-preview/landing-page/apper/all-demo/01-app-landing-page-defoult/images/bread_crumb_bg.png);
+    /* background-image: url(https://kalanidhithemes.com/live-preview/landing-page/apper/all-demo/01-app-landing-page-defoult/images/bread_crumb_bg.png); */
     background: var(--purple);
     background-repeat: no-repeat;
     background-size: cover;
