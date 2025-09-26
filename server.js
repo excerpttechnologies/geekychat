@@ -2277,21 +2277,49 @@ async function handleIncomingMessageAutoReply(savedData) {
     const customerPhone = message.from;
     const phoneNumberId = savedData.rawData?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
 
-    // Find campaigns where this customer received a message and hasn't been auto-replied yet
+    console.log(`Processing auto-reply for customer: ${customerPhone}`);
+
+    // FIXED: Include 'pending' status and improve query
     const campaigns = await Campaign.find({
       phoneNumberId,
       autoReplyEnabled: true,
       "messageDetails.phoneNumber": customerPhone,
-      "messageDetails.status": { $in: ["sent", "delivered", "read"] },
-      $nor: [
-        { "repliedContacts.phoneNumber": customerPhone, "repliedContacts.autoReplySent": true }
-      ]
+      "messageDetails.status": { $in: ["pending", "sent", "delivered", "read"] }, // Added 'pending'
+      // FIXED: Check if auto-reply already sent to this contact
+      "repliedContacts.phoneNumber": { $ne: customerPhone }
     });
+
+    console.log(`Found ${campaigns.length} campaigns for auto-reply`);
 
     for (const campaign of campaigns) {
       // Check if customer received a message from this campaign
-      const sentMessage = campaign.messageDetails.find(msg => msg.phoneNumber === customerPhone);
-      if (!sentMessage) continue;
+      const sentMessage = campaign.messageDetails.find(msg => 
+        msg.phoneNumber === customerPhone && 
+        ["pending", "sent", "delivered", "read"].includes(msg.status)
+      );
+      
+      if (!sentMessage) {
+        console.log(`No sent message found for ${customerPhone} in campaign ${campaign.campaignName}`);
+        continue;
+      }
+
+      // Check if auto-reply already sent
+      const alreadyReplied = campaign.repliedContacts?.some(contact => 
+        contact.phoneNumber === customerPhone && contact.autoReplySent
+      );
+      
+      if (alreadyReplied) {
+        console.log(`Auto-reply already sent to ${customerPhone} for campaign ${campaign.campaignName}`);
+        continue;
+      }
+
+      console.log(`Preparing auto-reply for ${customerPhone} in campaign ${campaign.campaignName}`);
+
+      // FIXED: Add validation for auto-reply message
+      if (!campaign.autoReplyMessage || campaign.autoReplyMessage.trim().length === 0) {
+        console.log(`No auto-reply message configured for campaign ${campaign.campaignName}`);
+        continue;
+      }
 
       // Send auto-reply
       const autoReplyPayload = {
@@ -2303,23 +2331,29 @@ async function handleIncomingMessageAutoReply(savedData) {
 
       // Add delay if specified
       if (campaign.autoReplyDelay > 0) {
+        console.log(`Waiting ${campaign.autoReplyDelay} seconds before sending auto-reply`);
         await new Promise(resolve => setTimeout(resolve, campaign.autoReplyDelay * 1000));
       }
 
+      // FIXED: Use proper access token
+      const ACCESS_TOKEN = process.env.ACCESS_TOKEN || "EAAdzxxobLG4BPU8Lei8DhhuZCjlCthpNQ55ok3LGlpY1PSIzXsOnTrEje2BvKUZCjFPOWlTtJg1TezXPgjp7NrCPN5Nzv6x2BOF7lMQml80v4NNIIWFEZAy5H7ZBZAgk7ZBku0y7QIBIwMsQ9ZCVe6JpbAa9wSz1dHb7xeDJTw7msm7AoxF1YMumg01P1LGBAZDZD";
+      
       const response = await fetch(
         `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${process.env.ACCESS_TOKEN}`, // Use your access token
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(autoReplyPayload),
         }
       );
 
-      if (response.ok) {
-        // Mark as auto-replied
+      const responseData = await response.json();
+
+      if (response.ok && responseData.messages) {
+        // FIXED: Mark as auto-replied with proper structure
         await Campaign.updateOne(
           { _id: campaign._id },
           {
@@ -2327,12 +2361,31 @@ async function handleIncomingMessageAutoReply(savedData) {
               repliedContacts: {
                 phoneNumber: customerPhone,
                 repliedAt: new Date(),
-                autoReplySent: true
+                autoReplySent: true,
+                messageId: responseData.messages[0].id
               }
             }
           }
         );
-        console.log(`Auto-reply sent to ${customerPhone} for campaign ${campaign.campaignName}`);
+        console.log(`✅ Auto-reply sent to ${customerPhone} for campaign ${campaign.campaignName}`);
+        console.log(`Auto-reply message ID: ${responseData.messages[0].id}`);
+      } else {
+        console.error(`❌ Failed to send auto-reply to ${customerPhone}:`, responseData);
+        
+        // Log the error but still mark as attempted to prevent infinite retries
+        await Campaign.updateOne(
+          { _id: campaign._id },
+          {
+            $push: {
+              repliedContacts: {
+                phoneNumber: customerPhone,
+                repliedAt: new Date(),
+                autoReplySent: false,
+                error: responseData.error?.message || 'Unknown error'
+              }
+            }
+          }
+        );
       }
     }
   } catch (error) {
@@ -2374,13 +2427,28 @@ app.post('/webhook', async (req, res) => {
             timestamp: new Date()
         };
 
-        if (req.body.entry?.[0]?.changes?.[0]?.value?.messages) {
+      
 // Save to MongoDB
 const newWebhookData = new WebhookData(webhookData);
 const savedData = await newWebhookData.save();
- await handleIncomingMessageAutoReply(savedData);
-  }
 
+ if (req.body.entry?.[0]?.changes?.[0]?.value?.messages) {
+            const messages = req.body.entry[0].changes[0].value.messages;
+            console.log(`🔄 Processing ${messages.length} incoming message(s) for auto-reply`);
+            
+            // Log message details
+            messages.forEach((msg, index) => {
+                console.log(`Message ${index + 1}:`, {
+                    from: msg.from,
+                    type: msg.type,
+                    id: msg.id,
+                    timestamp: msg.timestamp
+                });
+            });
+
+            // Call auto-reply handler
+            await handleIncomingMessageAutoReply(savedData);
+        }
 
         // ADD THIS SECTION - Update message status if it's a status webhook
         if (dataType === 'whatsapp_status' && req.body.entry && req.body.entry[0] && req.body.entry[0].changes) {

@@ -70,11 +70,16 @@ const CampaignSchema = new mongoose.Schema({
 autoReplyEnabled: { type: Boolean, default: false },
 autoReplyMessage: { type: String, default: "" },
 autoReplyDelay: { type: Number, default: 0 }, // seconds
-repliedContacts: [{ 
-  phoneNumber: String, 
-  repliedAt: Date,
-  autoReplySent: { type: Boolean, default: false }
-}],
+// In your campaign creation, ensure repliedContacts is initialized
+repliedContacts: { type: [
+  {
+    phoneNumber: String,
+    repliedAt: Date,
+    autoReplySent: { type: Boolean, default: false },
+    messageId: String,
+    error: String
+  }
+], default: [] }, // Add default empty array
   // Campaign statistics
   stats: {
     totalContacts: { type: Number, default: 0 },
