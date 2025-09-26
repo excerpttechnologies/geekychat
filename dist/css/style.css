@@ -2109,7 +2109,7 @@ footer a:hover {
 footer h3 {
     font-size: 20px;
     font-weight: 600;
-    margin-bottom: 50px;
+    /* margin-bottom: 50px; */
     padding-top: 10px;
     color: #000;
 }
@@ -3613,6 +3613,24 @@ header.fix_style.white_header {
   .banner_text{
     margin-top: -50px !important;
   }
+}
+
+.sub_menu ul {
+  background: white;
+  display: inline-block;   /* Makes the <ul> only as wide as needed */
+  padding: 6px 0;
+    /* Optional: border for visibility */
+  min-width: 220px;        /* Fallback for minimum width */
+}
+
+.sub_menu ul li a {
+  white-space: nowrap;
+  display: block;
+  padding: 2px 16px;
+  background: white;
+  color: #000;
+  word-spacing: normal;
+ 
 }
 
 
