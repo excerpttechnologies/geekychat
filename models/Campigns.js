@@ -66,7 +66,15 @@ const CampaignSchema = new mongoose.Schema({
   batchNumber: { type: Number }, // Batch number for large campaigns
   parentCampaign: { type: String }, // Parent campaign name for batches
   totalBatches: { type: Number }, // Total number of batches
-  
+  // In your Campaign schema, add these fields:
+autoReplyEnabled: { type: Boolean, default: false },
+autoReplyMessage: { type: String, default: "" },
+autoReplyDelay: { type: Number, default: 0 }, // seconds
+repliedContacts: [{ 
+  phoneNumber: String, 
+  repliedAt: Date,
+  autoReplySent: { type: Boolean, default: false }
+}],
   // Campaign statistics
   stats: {
     totalContacts: { type: Number, default: 0 },

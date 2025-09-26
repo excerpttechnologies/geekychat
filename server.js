@@ -2265,360 +2265,80 @@ app.post('/api/send-message', async (req, res) => {
 //         });
 //     }
 // });
-const autoReplyRuleSchema = new mongoose.Schema({
-    name: String,
-    phoneNumberId: String,
-    isActive: { type: Boolean, default: true },
-    triggerType: {
-        type: String,
-        enum: ['first_reply', 'keyword', 'campaign_response'],
-        default: 'first_reply'
-    },
-    keywords: [String], // For keyword triggers
-    campaignId: String, // For campaign-specific replies
-    responseMessage: String, // The auto-reply message
-    maxExecutions: { type: Number, default: 1 }, // How many times per customer
-    timeDelay: { type: Number, default: 0 }, // Delay in seconds
-    createdAt: { type: Date, default: Date.now }
-});
 
-const AutoReplyRule = mongoose.model('AutoReplyRule', autoReplyRuleSchema);
 
-// Auto-Reply Log Schema
-const autoReplyLogSchema = new mongoose.Schema({
-    ruleId: String,
-    phoneNumberId: String,
-    customerNumber: String,
-    messageContent: String,
-    sentAt: { type: Date, default: Date.now }
-});
+// Add this function to handle incoming messages and auto-reply
+async function handleIncomingMessageAutoReply(savedData) {
+  try {
+    const messages = savedData.rawData?.entry?.[0]?.changes?.[0]?.value?.messages;
+    if (!messages || messages.length === 0) return;
 
-const AutoReplyLog = mongoose.model('AutoReplyLog', autoReplyLogSchema);
+    const message = messages[0];
+    const customerPhone = message.from;
+    const phoneNumberId = savedData.rawData?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
 
-// ADD THIS FUNCTION TO YOUR INDEX.JS
+    // Find campaigns where this customer received a message and hasn't been auto-replied yet
+    const campaigns = await Campaign.find({
+      phoneNumberId,
+      autoReplyEnabled: true,
+      "messageDetails.phoneNumber": customerPhone,
+      "messageDetails.status": { $in: ["sent", "delivered", "read"] },
+      $nor: [
+        { "repliedContacts.phoneNumber": customerPhone, "repliedContacts.autoReplySent": true }
+      ]
+    });
 
-// async function processAutoReply(webhookData) {
-//     try {
-//         const value = webhookData.rawData?.entry?.[0]?.changes?.[0]?.value;
-//         if (!value || !value.messages) return;
+    for (const campaign of campaigns) {
+      // Check if customer received a message from this campaign
+      const sentMessage = campaign.messageDetails.find(msg => msg.phoneNumber === customerPhone);
+      if (!sentMessage) continue;
 
-//         const message = value.messages[0];
-//         const phoneNumberId = value.metadata.phone_number_id;
-//         const customerNumber = message.from;
-//         const messageContent = message.text?.body || '';
-//         const contactName = value.contacts?.[0]?.profile?.name;
-// console.log('=== AUTO-REPLY DEBUG ===');
-//         console.log(`Customer: ${customerNumber}`);
-//         console.log(`Phone ID: ${phoneNumberId}`);
-//         console.log(`Message: ${messageContent}`);
-//         console.log('========================');
-//         console.log(`Checking auto-reply for customer: ${customerNumber}`);
+      // Send auto-reply
+      const autoReplyPayload = {
+        messaging_product: "whatsapp",
+        to: customerPhone,
+        type: "text",
+        text: { body: campaign.autoReplyMessage }
+      };
 
-//         // Get all active rules for this phone number
-//         const rules = await AutoReplyRule.find({
-//             phoneNumberId: phoneNumberId,
-//             isActive: true
-//         });
+      // Add delay if specified
+      if (campaign.autoReplyDelay > 0) {
+        await new Promise(resolve => setTimeout(resolve, campaign.autoReplyDelay * 1000));
+      }
 
-//         for (const rule of rules) {
-//             let shouldSend = false;
-
-//             // Check if rule should trigger
-//             if (rule.triggerType === 'first_reply') {
-//                 // Check if this is customer's first message
-//                 const previousMessages = await WebhookData.countDocuments({
-//                     'rawData.entry.0.changes.0.value.metadata.phone_number_id': phoneNumberId,
-//                     'rawData.entry.0.changes.0.value.messages.0.from': customerNumber,
-//                     dataType: 'whatsapp_message'
-//                 });
-//                 shouldSend = previousMessages <= 1;
-//             } 
-//             else if (rule.triggerType === 'keyword') {
-//                 // Check if message contains any keywords
-//                 const content = messageContent.toLowerCase();
-//                 shouldSend = rule.keywords.some(keyword => 
-//                     content.includes(keyword.toLowerCase())
-//                 );
-//             }
-//            else if (rule.triggerType === 'campaign_response') {
-//     // Check if customer received ANY campaign message from this phone number
-//     const campaigns = await Campaign.find({
-//         phoneNumberId: phoneNumberId,
-//         'messageDetails.phoneNumber': {
-//             $in: [
-//                 customerNumber,
-//                 customerNumber.replace(/^\+/, ''),
-//                 customerNumber.replace(/^\+?91/, ''),
-//                 customerNumber.replace(/^\+?91/, '').replace(/^91/, '')
-//             ]
-//         }
-//     });
-    
-//     shouldSend = campaigns.length > 0;
-//     console.log(`Campaign response check: Found ${campaigns.length} campaigns for ${customerNumber}`);
-// }
-
-//             // Check execution limit
-//             if (shouldSend && rule.maxExecutions > 0) {
-//                 const executionCount = await AutoReplyLog.countDocuments({
-//                     ruleId: rule._id.toString(),
-//                     customerNumber: customerNumber
-//                 });
-                
-//                 if (executionCount >= rule.maxExecutions) {
-//                     shouldSend = false;
-//                     console.log(`Rule ${rule.name} reached max executions for ${customerNumber}`);
-//                 }
-//             }
-
-//             // Send auto-reply
-//             if (shouldSend) {
-//                 setTimeout(async () => {
-//                     await sendAutoReply(rule, phoneNumberId, customerNumber, contactName);
-//                 }, rule.timeDelay * 1000);
-//             }
-//         }
-//     } catch (error) {
-//         console.error('Error processing auto-reply:', error);
-//     }
-// }
-async function processAutoReply(webhookData) {
-    console.log('🔍 AUTO-REPLY DEBUG START');
-    console.log('Raw webhook data:', JSON.stringify(webhookData, null, 2));
-    
-    try {
-        const value = webhookData.rawData?.entry?.[0]?.changes?.[0]?.value;
-        
-        console.log('📱 Value object:', JSON.stringify(value, null, 2));
-        
-        if (!value || !value.messages) {
-            console.log('❌ No value or messages found in webhook');
-            return;
+      const response = await fetch(
+        `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.ACCESS_TOKEN}`, // Use your access token
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(autoReplyPayload),
         }
+      );
 
-        const message = value.messages[0];
-        const phoneNumberId = value.metadata.phone_number_id;
-        const customerNumber = message.from;
-        const messageContent = message.text?.body || '';
-        const contactName = value.contacts?.[0]?.profile?.name;
-
-        console.log('📋 Extracted data:');
-        console.log(`  Customer: ${customerNumber}`);
-        console.log(`  Phone ID: ${phoneNumberId}`);  
-        console.log(`  Message: "${messageContent}"`);
-        console.log(`  Contact Name: ${contactName}`);
-
-        // Check if rules exist
-        const rules = await AutoReplyRule.find({
-            phoneNumberId: phoneNumberId,
-            isActive: true
-        });
-
-        console.log(`🎯 Found ${rules.length} active rules for phone ${phoneNumberId}`);
-        rules.forEach(rule => {
-            console.log(`  Rule: "${rule.name}" - Type: ${rule.triggerType}`);
-        });
-
-        if (rules.length === 0) {
-            console.log('❌ No active rules found - auto-reply will not trigger');
-            return;
-        }
-
-        for (const rule of rules) {
-            console.log(`\n🔄 Processing rule: "${rule.name}"`);
-            let shouldSend = false;
-
-            if (rule.triggerType === 'first_reply') {
-                console.log('  Checking first_reply trigger...');
-                
-                const previousMessages = await WebhookData.countDocuments({
-                    'rawData.entry.0.changes.0.value.metadata.phone_number_id': phoneNumberId,
-                    'rawData.entry.0.changes.0.value.messages.0.from': customerNumber,
-                    dataType: 'whatsapp_message'
-                });
-                
-                console.log(`  Previous messages from ${customerNumber}: ${previousMessages}`);
-                shouldSend = previousMessages <= 1;
-                console.log(`  Should send first_reply? ${shouldSend}`);
+      if (response.ok) {
+        // Mark as auto-replied
+        await Campaign.updateOne(
+          { _id: campaign._id },
+          {
+            $push: {
+              repliedContacts: {
+                phoneNumber: customerPhone,
+                repliedAt: new Date(),
+                autoReplySent: true
+              }
             }
-            else if (rule.triggerType === 'keyword') {
-                console.log('  Checking keyword trigger...');
-                console.log(`  Keywords: ${JSON.stringify(rule.keywords)}`);
-                
-                const content = messageContent.toLowerCase();
-                shouldSend = rule.keywords.some(keyword => {
-                    const matches = content.includes(keyword.toLowerCase());
-                    console.log(`    "${keyword}" in "${content}"? ${matches}`);
-                    return matches;
-                });
-                console.log(`  Should send keyword reply? ${shouldSend}`);
-            }
-            else if (rule.triggerType === 'campaign_response') {
-                console.log('  Checking campaign_response trigger...');
-                
-                const campaigns = await Campaign.find({
-                    phoneNumberId: phoneNumberId,
-                    'messageDetails.phoneNumber': {
-                        $in: [
-                            customerNumber,
-                            customerNumber.replace(/^\+/, ''),
-                            customerNumber.replace(/^\+?91/, ''),
-                            customerNumber.replace(/^\+?91/, '').replace(/^91/, '')
-                        ]
-                    }
-                });
-                
-                console.log(`  Found ${campaigns.length} campaigns for customer`);
-                campaigns.forEach(campaign => {
-                    console.log(`    Campaign: ${campaign._id}`);
-                });
-                
-                shouldSend = campaigns.length > 0;
-                console.log(`  Should send campaign reply? ${shouldSend}`);
-            }
-
-            // Check execution limit
-            if (shouldSend && rule.maxExecutions > 0) {
-                console.log('  Checking execution limits...');
-                
-                const executionCount = await AutoReplyLog.countDocuments({
-                    ruleId: rule._id.toString(),
-                    customerNumber: customerNumber
-                });
-                
-                console.log(`  Executions so far: ${executionCount}/${rule.maxExecutions}`);
-                
-                if (executionCount >= rule.maxExecutions) {
-                    shouldSend = false;
-                    console.log(`  ❌ Rule reached max executions`);
-                }
-            }
-
-            // Send auto-reply
-            if (shouldSend) {
-                console.log(`✅ TRIGGERING AUTO-REPLY: "${rule.name}"`);
-                console.log(`   Delay: ${rule.timeDelay} seconds`);
-                
-                setTimeout(async () => {
-                    await sendAutoReply(rule, phoneNumberId, customerNumber, contactName);
-                }, rule.timeDelay * 1000);
-            } else {
-                console.log(`❌ Rule "${rule.name}" will not trigger`);
-            }
-        }
-    } catch (error) {
-        console.error('💥 Error processing auto-reply:', error);
-        console.error('Stack trace:', error.stack);
+          }
+        );
+        console.log(`Auto-reply sent to ${customerPhone} for campaign ${campaign.campaignName}`);
+      }
     }
-    
-    console.log('🔍 AUTO-REPLY DEBUG END\n');
+  } catch (error) {
+    console.error('Auto-reply error:', error);
+  }
 }
-// async function sendAutoReply(rule, phoneNumberId, customerNumber, contactName) {
-//     try {
-//         // Personalize message
-//                 const accessToken = process.env.ACCESS_TOKEN; 
-//         let message = rule.responseMessage;
-//         if (contactName) {
-//             message = message.replace('{customer_name}', contactName);
-//         }
-//         message = message.replace('{phone}', customerNumber);
-
-//         // Send message via WhatsApp API
-//         const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-//             method: 'POST',
-//             headers: {
-//                 'Authorization': `Bearer ${accessToken}`,
-//                 'Content-Type': 'application/json',
-//             },
-//             body: JSON.stringify({
-//                 messaging_product: 'whatsapp',
-//                 to: customerNumber,
-//                 type: 'text',
-//                 text: { body: message }
-//             })
-//         });
-
-//         if (response.ok) {
-//             const data = await response.json();
-//             const messageId = data.messages[0].id;
-
-//             // Store the auto-reply message
-//             const newMessage = new Message({
-//                 messageId: messageId,
-//                 phoneNumberId: phoneNumberId,
-//                 to: customerNumber,
-//                 from: phoneNumberId,
-//                 direction: 'outgoing',
-//                 messageType: 'text',
-//                 content: { text: message },
-//                 status: 'sent',
-//                 timestamp: new Date(),
-//                 isAutoReply: true
-//             });
-//             await newMessage.save();
-
-//             // Log execution
-//             const log = new AutoReplyLog({
-//                 ruleId: rule._id.toString(),
-//                 phoneNumberId: phoneNumberId,
-//                 customerNumber: customerNumber,
-//                 messageContent: message
-//             });
-//             await log.save();
-
-//             console.log(`Auto-reply sent: ${messageId}`);
-//         }
-//     } catch (error) {
-//         console.error('Error sending auto-reply:', error);
-//     }
-// }
-
-async function sendAutoReply(rule, phoneNumberId, customerNumber, contactName) {
-    try {
-        const accessToken = process.env.ACCESS_TOKEN; // Make sure this matches your .env file
-        
-        let message = rule.responseMessage;
-        if (contactName) {
-            message = message.replace('{customer_name}', contactName);
-        }
-        message = message.replace('{phone}', customerNumber);
-
-        console.log(`Sending auto-reply to ${customerNumber}: ${message}`);
-
-        const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: customerNumber,
-                type: 'text',
-                text: { body: message }
-            })
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            console.log(`✅ Auto-reply sent successfully: ${data.messages[0].id}`);
-            
-            // Log execution
-            const log = new AutoReplyLog({
-                ruleId: rule._id.toString(),
-                phoneNumberId: phoneNumberId,
-                customerNumber: customerNumber,
-                messageContent: message
-            });
-            await log.save();
-        } else {
-            console.error('❌ Failed to send auto-reply:', response.status, await response.text());
-        }
-    } catch (error) {
-        console.error('❌ Error sending auto-reply:', error);
-    }
-}
-
 app.post('/webhook', async (req, res) => {
     console.log('Received WhatsApp webhook at:', new Date().toISOString());
     console.log('Full payload:', JSON.stringify(req.body, null, 2));
@@ -2654,66 +2374,13 @@ app.post('/webhook', async (req, res) => {
             timestamp: new Date()
         };
 
-       
+        if (req.body.entry?.[0]?.changes?.[0]?.value?.messages) {
 // Save to MongoDB
 const newWebhookData = new WebhookData(webhookData);
 const savedData = await newWebhookData.save();
+ await handleIncomingMessageAutoReply(savedData);
+  }
 
-if (dataType === 'whatsapp_message') {
-    console.log('🚀 MESSAGE RECEIVED - CHECKING FOR AUTO-REPLY');
-    
-    // Extract message data immediately
-    const value = req.body.entry?.[0]?.changes?.[0]?.value;
-    if (value && value.messages && value.messages[0]) {
-        const message = value.messages[0];
-        const phoneNumberId = value.metadata.phone_number_id;
-        const customerNumber = message.from;
-        const messageContent = message.text?.body || '';
-        
-        console.log(`Customer ${customerNumber} sent: "${messageContent}"`);
-        
-        // Check if this is a first reply (count previous messages)
-        const messageCount = await WebhookData.countDocuments({
-            'rawData.entry.0.changes.0.value.metadata.phone_number_id': phoneNumberId,
-            'rawData.entry.0.changes.0.value.messages.0.from': customerNumber,
-            dataType: 'whatsapp_message'
-        });
-        
-        console.log(`Total messages from ${customerNumber}: ${messageCount}`);
-        
-        // If this is first message, trigger auto-reply
-        if (messageCount === 1) {
-            console.log('✅ FIRST MESSAGE - TRIGGERING AUTO-REPLY');
-            
-            // Find first_reply rules for this phone number
-            const firstReplyRules = await AutoReplyRule.find({
-                phoneNumberId: phoneNumberId,
-                triggerType: 'first_reply',
-                isActive: true
-            });
-            
-            console.log(`Found ${firstReplyRules.length} first-reply rules`);
-            
-            for (const rule of firstReplyRules) {
-                // Check execution limit
-                const executionCount = await AutoReplyLog.countDocuments({
-                    ruleId: rule._id.toString(),
-                    customerNumber: customerNumber
-                });
-                
-                if (executionCount < rule.maxExecutions) {
-                    console.log(`Sending auto-reply: ${rule.name}`);
-                    
-                    setTimeout(async () => {
-                        await sendAutoReply(rule, phoneNumberId, customerNumber, value.contacts?.[0]?.profile?.name);
-                    }, rule.timeDelay * 1000);
-                }
-            }
-        }
-    }
-} else {
-    console.log('❌ NOT A MESSAGE - SKIPPING AUTO-REPLY');
-}
 
         // ADD THIS SECTION - Update message status if it's a status webhook
         if (dataType === 'whatsapp_status' && req.body.entry && req.body.entry[0] && req.body.entry[0].changes) {
