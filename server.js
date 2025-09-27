@@ -5,6 +5,8 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const Campaign = require("./models/Campigns");
 require("dotenv").config();
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 const nodemailer =require ("nodemailer");
 const xlsx = require("xlsx");
 
@@ -18,7 +20,10 @@ const paymentRoutes = require("./routes/payment");
 const campaignRoutes = require("./routes/campigns");
 const history = require('connect-history-api-fallback');
 const app = express();
-
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_qUmhUFElBiSNIs',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS',
+});
 app.use(cors()); 
 app.use(express.json());
 app.use(express.json({ limit: '100mb' })); // Increase from default 100kb
@@ -1242,7 +1247,439 @@ async function recalculateCampaignStats(campaignId) {
 // 1. Enhanced GET route for detailed campaigns
 
 
+// Route 1: Calculate campaign cost
+app.post('/api/campaigns/calculate-cost', async (req, res) => {
+  try {
+    const { contactCount, headerType } = req.body;
+    
+    // Validation
+    if (!contactCount || !headerType) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contact count and header type are required'
+      });
+    }
+
+    if (contactCount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contact count must be greater than 0'
+      });
+    }
+
+    // Define pricing rules
+    let ratePerContact;
+    switch (headerType.toUpperCase()) {
+      case 'TEXT':
+        ratePerContact = 1; // 1 rupee for text messages
+        break;
+      case 'IMAGE':
+      case 'VIDEO':
+      case 'DOCUMENT':
+        ratePerContact = 1.5; // 1.5 rupees for media messages
+        break;
+      default:
+        ratePerContact = 1; // Default to text rate
+    }
+    
+    const totalAmount = Math.round(contactCount * ratePerContact * 100) / 100; // Round to 2 decimal places
+    
+    res.json({
+      success: true,
+      data: {
+        contactCount: parseInt(contactCount),
+        headerType: headerType.toUpperCase(),
+        ratePerContact,
+        totalAmount,
+        currency: 'INR'
+      }
+    });
+console.log(`✅ Calculated cost: ${totalAmount} INR for ${contactCount} contacts with header type ${headerType}`);
+  } catch (error) {
+    console.error('Error calculating cost:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error',
+      message: error.message 
+    });
+  }
+});
+
+// Route 2: Create Razorpay order
+app.post('/api/campaigns/create-order', async (req, res) => {
+  try {
+    const { 
+      contactCount, 
+      headerType, 
+      campaignName, 
+      userPhone,
+      phoneNumberId,
+      templateName 
+    } = req.body;
+    console.log('Creating Razorpay order with data:', req.body);
+     console.log('Razorpay keys:', {
+      key_id: process.env.RAZORPAY_KEY_ID ? 'Present' : 'Missing',
+      key_secret: process.env.RAZORPAY_KEY_SECRET ? 'Present' : 'Missing'
+    });
+    // Validation
+    if (!contactCount || !headerType || !campaignName || !userPhone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: contactCount, headerType, campaignName, userPhone'
+      });
+    }
+
+    // Calculate amount
+    const ratePerContact = headerType.toUpperCase() === 'TEXT' ? 1 : 1.5;
+    const totalAmount = contactCount * ratePerContact;
+    const amountInPaise = Math.round(totalAmount * 100); // Convert to paise for Razorpay
+    
+    // Create Razorpay order
+    const orderOptions = {
+      amount: amountInPaise, // Amount in paise
+      currency: 'INR',
+      receipt: `campaign_${campaignName}_${Date.now()}`,
+      notes: {
+        campaignName,
+        userPhone,
+        contactCount: contactCount.toString(),
+        headerType,
+        ratePerContact: ratePerContact.toString(),
+        phoneNumberId: phoneNumberId || '',
+        templateName: templateName || ''
+      }
+    };
+    
+    const order = await razorpay.orders.create(orderOptions);
+    
+    res.json({
+      success: true,
+      order: order,
+      paymentDetails: {
+        amount: totalAmount, // Amount in rupees for display
+        contactCount,
+        headerType,
+        ratePerContact,
+        currency: 'INR'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error creating Razorpay order:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create payment order',
+      message: error.message 
+    });
+  }
+});
+
+// Route 3: Verify payment and create/update campaign
+app.post('/api/campaigns/verify-payment', async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      campaignData
+    } = req.body;
+    
+    // Validation
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing payment verification data'
+      });
+    }
+
+    if (!campaignData) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campaign data is required'
+      });
+    }
+
+    // Verify Razorpay signature
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+    
+    const isSignatureValid = expectedSignature === razorpay_signature;
+    
+    if (!isSignatureValid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment signature verification failed'
+      });
+    }
+
+    // Get payment details from Razorpay
+    const payment = await razorpay.payments.fetch(razorpay_payment_id);
+    
+    // Calculate payment details
+    const ratePerContact = campaignData.headerType === 'TEXT' ? 1 : 1.5;
+    const totalAmount = campaignData.contacts ? campaignData.contacts.length * ratePerContact : 0;
+
+    // Create campaign with payment details
+    const campaign = new Campaign({
+      campaignName: campaignData.campaignName,
+      phoneNumberId: campaignData.phoneNumberId,
+      templateName: campaignData.templateName,
+      headerType: campaignData.headerType,
+      contacts: campaignData.contacts || [],
+      status: 'payment_completed', // Updated status
+      userPhone: campaignData.userPhone,
+      
+      // Add payment details
+      paymentDetails: [{
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id,
+        amount: totalAmount,
+        currency: 'INR',
+        contactCount: campaignData.contacts ? campaignData.contacts.length : 0,
+        headerType: campaignData.headerType,
+        ratePerContact: ratePerContact,
+        paymentStatus: 'success',
+        paymentMethod: payment.method || 'unknown',
+        razorpaySignature: razorpay_signature,
+        transactionId: payment.acquirer_data?.bank_transaction_id || null,
+        paidAt: new Date(),
+        createdAt: new Date()
+      }],
+
+      // Initialize stats
+      stats: {
+        totalContacts: campaignData.contacts ? campaignData.contacts.length : 0,
+        successfulMessages: 0,
+        failedMessages: 0,
+        deliveredMessages: 0,
+        readMessages: 0,
+        successRate: 0
+      },
+
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    
+    const savedCampaign = await campaign.save();
+    
+    console.log(`✅ Payment verified and campaign created:`, {
+      campaignId: savedCampaign._id,
+      campaignName: savedCampaign.campaignName,
+      paymentId: razorpay_payment_id,
+      amount: totalAmount
+    });
+    
+    res.json({
+      success: true,
+      message: 'Payment verified and campaign created successfully',
+      data: {
+        campaignId: savedCampaign._id,
+        campaignName: savedCampaign.campaignName,
+        paymentId: razorpay_payment_id,
+        amount: totalAmount,
+        status: savedCampaign.status
+      }
+    });
+
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Payment verification failed',
+      message: error.message 
+    });
+  }
+});
+
+// Route 4: Get payment history for a user
+app.get('/api/campaigns/history/:userPhone', async (req, res) => {
+  try {
+    const { userPhone } = req.params;
+    
+    if (!userPhone) {
+      return res.status(400).json({
+        success: false,
+        error: 'User phone is required'
+      });
+    }
+
+    const campaigns = await Campaign.find({ 
+      userPhone,
+      paymentDetails: { $exists: true, $ne: [] }
+    })
+    .select('campaignName paymentDetails createdAt status')
+    .sort({ createdAt: -1 })
+    .limit(50);
+
+    const paymentHistory = campaigns.map(campaign => ({
+      campaignId: campaign._id,
+      campaignName: campaign.campaignName,
+      status: campaign.status,
+      createdAt: campaign.createdAt,
+      payments: campaign.paymentDetails.map(payment => ({
+        paymentId: payment.paymentId,
+        amount: payment.amount,
+        contactCount: payment.contactCount,
+        headerType: payment.headerType,
+        paymentStatus: payment.paymentStatus,
+        paidAt: payment.paidAt
+      }))
+    }));
+
+    res.json({
+      success: true,
+      data: paymentHistory,
+      total: paymentHistory.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching payment history:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch payment history',
+      message: error.message 
+    });
+  }
+});
+
+// Route 5: Refund payment (if needed)
+app.post('/refund', async (req, res) => {
+  try {
+    const { paymentId, amount, campaignId, reason } = req.body;
+    
+    if (!paymentId || !campaignId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment ID and Campaign ID are required'
+      });
+    }
+
+    // Create refund in Razorpay
+    const refund = await razorpay.payments.refund(paymentId, {
+      amount: amount ? Math.round(amount * 100) : undefined, // Partial refund if amount specified
+      notes: {
+        reason: reason || 'Campaign refund',
+        campaignId
+      }
+    });
+
+    // Update campaign status
+    await Campaign.findByIdAndUpdate(campaignId, {
+      status: 'refunded',
+      'paymentDetails.$.paymentStatus': 'refunded',
+      updatedAt: new Date()
+    });
+
+    res.json({
+      success: true,
+      message: 'Refund processed successfully',
+      refund: {
+        refundId: refund.id,
+        amount: refund.amount / 100, // Convert back to rupees
+        status: refund.status
+      }
+    });
+
+  } catch (error) {
+    console.error('Refund error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Refund processing failed',
+      message: error.message 
+    });
+  }
+});
+
+// Route 6: Check campaign payment status
+app.get('/api/campaigns/status/:campaignId', async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    
+    const campaign = await Campaign.findById(campaignId)
+      .select('campaignName status paymentDetails');
+    
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        error: 'Campaign not found'
+      });
+    }
+
+    const paymentStatus = campaign.paymentDetails && campaign.paymentDetails.length > 0 
+      ? campaign.paymentDetails[campaign.paymentDetails.length - 1].paymentStatus
+      : 'pending';
+
+    res.json({
+      success: true,
+      data: {
+        campaignId: campaign._id,
+        campaignName: campaign.campaignName,
+        status: campaign.status,
+        paymentStatus,
+        paymentDetails: campaign.paymentDetails || []
+      }
+    });
+
+  } catch (error) {
+    console.error('Error checking payment status:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to check payment status',
+      message: error.message 
+    });
+  }
+});
 // 2. Route for batch campaign saving (for large campaigns)
+// app.post('/api/campaigns/batch', async (req, res) => {
+//   try {
+//     const {
+//       campaignName,
+//       templateName,
+//       phoneNumberId,
+//       headerType,
+//       contacts,
+//       messageDetails,
+//       status,
+//       userPhone,
+//       batchNumber,
+//       parentCampaign,
+//       stats
+//     } = req.body;
+
+//     const campaign = new Campaign({
+//       campaignName,
+//       templateName,
+//       phoneNumberId,
+//       headerType,
+//       contacts: contacts || [],
+//       messageDetails: messageDetails || [],
+//       status,
+//       userPhone,
+//       batchNumber,
+//       parentCampaign,
+//       stats,
+//       createdAt: new Date(),
+//       updatedAt: new Date()
+//     });
+
+//     const savedCampaign = await campaign.save();
+//     res.json({ 
+//       success: true, 
+//       campaign: savedCampaign,
+//       message: `Batch ${batchNumber} saved successfully`
+//     });
+//   } catch (error) {
+//     console.error('Error saving batch campaign:', error);
+//     res.status(500).json({ 
+//       success: false, 
+//       error: 'Failed to save batch campaign',
+//       details: error.message 
+//     });
+//   }
+// });
 app.post('/api/campaigns/batch', async (req, res) => {
   try {
     const {
@@ -1259,6 +1696,19 @@ app.post('/api/campaigns/batch', async (req, res) => {
       stats
     } = req.body;
 
+    // Find the original campaign with payment details
+    const originalCampaign = await Campaign.findOne({
+      campaignName: parentCampaign,
+      userPhone: userPhone,
+      paymentDetails: { $exists: true, $ne: [] } // Ensure payment details exist and not empty
+    }).sort({ createdAt: -1 }); // Get the latest one
+
+    console.log('Found original campaign:', originalCampaign ? 'Yes' : 'No');
+    console.log('Payment details found:', originalCampaign?.paymentDetails?.length || 0);
+
+    // Extract payment details from original campaign
+    const paymentDetails = originalCampaign?.paymentDetails || [];
+
     const campaign = new Campaign({
       campaignName,
       templateName,
@@ -1271,26 +1721,29 @@ app.post('/api/campaigns/batch', async (req, res) => {
       batchNumber,
       parentCampaign,
       stats,
+      paymentDetails: paymentDetails, // Include payment details in batch
       createdAt: new Date(),
       updatedAt: new Date()
     });
 
     const savedCampaign = await campaign.save();
-    res.json({ 
-      success: true, 
+    
+    console.log('Saved batch with payment details:', savedCampaign.paymentDetails.length);
+    
+    res.json({
+      success: true,
       campaign: savedCampaign,
-      message: `Batch ${batchNumber} saved successfully`
+      message: `Batch ${batchNumber} saved successfully with ${paymentDetails.length} payment details`
     });
   } catch (error) {
     console.error('Error saving batch campaign:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: 'Failed to save batch campaign',
-      details: error.message 
+      details: error.message
     });
   }
 });
-
 // 3. Route for resending failed messages
 app.post('/api/campaigns/resend-failed', async (req, res) => {
   try {
@@ -1441,6 +1894,8 @@ app.post('/api/campaigns/resend-failed', async (req, res) => {
     });
   }
 });
+
+
 
 // 4. Enhanced status update route
 app.post('/api/campaigns/update-status', async (req, res) => {
@@ -2879,7 +3334,7 @@ app.post("/api/contact", async (req, res) => {
 app.use(history());
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Fallback route for SPA (React Router)
+// Fallback route for SPA (React app)
 // app.get('*', (req, res) => {
 //   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 // });

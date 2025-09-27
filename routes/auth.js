@@ -229,7 +229,10 @@ const path = require('path');
 const User = require('../models/User');
 const axios = require('axios');
 const fs = require('fs');
+const Razorpay = require('razorpay');
 const router = express.Router();
+const jwt = require("jsonwebtoken");
+
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -257,19 +260,19 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-router.post('/register', async (req, res) => {
-  const { phone, password, firstname, lastname ,email} = req.body;
-  try {
-    const existing = await User.findOne({ phone });
-    if (existing) return res.status(400).json({ message: 'User already exists' });
+// router.post('/register', async (req, res) => {
+//   const { phone, password, firstname, lastname ,email} = req.body;
+//   try {
+//     const existing = await User.findOne({ phone });
+//     if (existing) return res.status(400).json({ message: 'User already exists' });
 
-    const newUser = new User({ phone, password, email,firstName: firstname, lastName: lastname });
-    await newUser.save();
-    res.status(201).json({ message: 'User registered' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error registering user' });
-  }
-});
+//     const newUser = new User({ phone, password, email,firstName: firstname, lastName: lastname });
+//     await newUser.save();
+//     res.status(201).json({ message: 'User registered' });
+//   } catch (err) {
+//     res.status(500).json({ message: 'Error registering user' });
+//   }
+// });
 
 // Login route - Check verification status
 // router.post('/login', async (req, res) => {
@@ -307,6 +310,256 @@ router.post('/register', async (req, res) => {
 //     res.status(500).json({ message: 'Server error' });
 //   }
 // });
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_qUmhUFElBiSNIs',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS',
+});
+
+// Plan configuration with duration mapping
+const planDurationMapping = {
+  monthly: 30,
+  quarterly: 90,
+  'half-yearly': 180,
+  yearly: 365,
+};
+
+// Helper function to calculate validity date
+const calculateValidityDate = (selectedPlan) => {
+  const currentDate = new Date();
+  const durationInDays = planDurationMapping[selectedPlan];
+  
+  if (!durationInDays) {
+    throw new Error('Invalid plan selected');
+  }
+  
+  // Add the duration to current date
+  const validityDate = new Date(currentDate);
+  validityDate.setDate(validityDate.getDate() + durationInDays);
+  
+  return validityDate;
+};
+
+// Create Razorpay Order
+router.post('/create-order', async (req, res) => {
+  try {
+    const { amount, currency = 'INR' } = req.body;
+    
+    if (!amount) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Amount is required' 
+      });
+    }
+
+    const options = {
+      amount: amount * 100, // Razorpay expects amount in paise
+      currency,
+      receipt: `order_${Date.now()}`,
+      payment_capture: 1
+    };
+
+    const order = await razorpay.orders.create(options);
+    
+    res.json({
+      success: true,
+      id: order.id,
+      currency: order.currency,
+      amount: order.amount,
+    });
+  } catch (error) {
+    console.error('Razorpay order creation error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create order',
+      error: error.message 
+    });
+  }
+});
+
+// Verify Razorpay Payment (Optional - for additional security)
+router.post('/verify-payment', async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    
+    const crypto = require('crypto');
+    const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS');
+    shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+    const digest = shasum.digest('hex');
+    
+    if (digest === razorpay_signature) {
+      res.json({ 
+        success: true, 
+        message: 'Payment verified successfully' 
+      });
+    } else {
+      res.status(400).json({ 
+        success: false, 
+        message: 'Invalid payment signature' 
+      });
+    }
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Payment verification failed',
+      error: error.message 
+    });
+  }
+});
+
+// Register User with Plan and Payment
+router.post('/register', async (req, res) => {
+  try {
+    const {
+      firstname,
+      lastname,
+      phone,
+      email,
+      password,
+      selectedPlan,
+      planTitle,
+      planPrice,
+      paymentId,
+      billingAddress,
+      shippingAddress
+    } = req.body;
+
+    // Validation
+    if (!firstname || !lastname || !phone || !email || !password || 
+        !selectedPlan || !planTitle || !planPrice || !paymentId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'All required fields must be provided' 
+      });
+    }
+
+    // Validate phone number (remove +91 prefix if present)
+    const cleanPhone = phone.replace(/^\+91/, '');
+    if (!/^\d{10}$/.test(cleanPhone)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Phone number must be exactly 10 digits' 
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ 
+      $or: [
+        { phone: cleanPhone },
+        { email }
+      ]
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'User already exists with this phone number or email' 
+      });
+    }
+
+    // Hash password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Calculate validity date based on selected plan
+    const validityDate = calculateValidityDate(selectedPlan);
+
+    // Create new user
+    const newUser = new User({
+      firstname,
+      lastname,
+      phone: cleanPhone,
+      email,
+      password: hashedPassword,
+      selectedPlan,
+      planTitle,
+      planPrice,
+      validity: validityDate,
+      paymentId,
+      paymentStatus: 'completed',
+      billingAddress: {
+        fullName: billingAddress.fullName,
+        address: billingAddress.address,
+        city: billingAddress.city,
+        state: billingAddress.state,
+        pincode: billingAddress.pincode,
+        country: billingAddress.country || 'India'
+      },
+      shippingAddress: {
+        fullName: shippingAddress.fullName,
+        address: shippingAddress.address,
+        city: shippingAddress.city,
+        state: shippingAddress.state,
+        pincode: shippingAddress.pincode,
+        country: shippingAddress.country || 'India'
+      },
+      isActive: true,
+       // Give some initial credits
+    });
+
+    // Save user to database
+    await newUser.save();
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: newUser._id, 
+        email: newUser.email,
+        selectedPlan: newUser.selectedPlan 
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '30d' }
+    );
+
+    // Return user data without password
+    const userResponse = {
+      _id: newUser._id,
+      firstname: newUser.firstname,
+      lastname: newUser.lastname,
+      phone: newUser.phone,
+      email: newUser.email,
+      selectedPlan: newUser.selectedPlan,
+      planTitle: newUser.planTitle,
+      planPrice: newUser.planPrice,
+      validity: newUser.validity,
+      daysRemaining: newUser.getDaysRemaining(),
+      isActive: newUser.isActive,
+      creditCoins: newUser.creditCoins,
+      billingAddress: newUser.billingAddress,
+      shippingAddress: newUser.shippingAddress,
+      createdAt: newUser.createdAt
+    };
+
+    res.status(201).json({
+      success: true,
+      message: 'User registered successfully',
+      token,
+      user: userResponse
+    });
+
+  } catch (error) {
+    console.error('Registration error:', error);
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ 
+        success: false, 
+        message: `User already exists with this ${field}` 
+      });
+    }
+
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error during registration',
+      error: error.message 
+    });
+  }
+});
+
+
+
 router.get('/', async (req, res) => {
   try {
     const users = await User.find().sort({ createdAt: -1 });
@@ -486,7 +739,7 @@ router.post('/verify-user', upload.fields([
       
       // Add 50 credits ONLY if user wasn't already verified
       if (!wasAlreadyVerified) {
-        updateData.$inc = { creditCoins: 50 }; // Use MongoDB's $inc operator to add 50 credits
+        updateData.$inc = { creditCoins: 25 }; // Use MongoDB's $inc operator to add 50 credits
       }
     }
 
@@ -540,7 +793,7 @@ const sendWhatsAppOTP = async (phoneNumber, otp) => {
       to: phoneNumber,
       type: "template",
       template: {
-        name: "login_otp_a2",
+        name: "login_otp_new",
         language: {
           code: "en_US"
         },
@@ -789,50 +1042,145 @@ router.post('/resend-otp', async (req, res) => {
 //     res.status(500).json({ message: 'Server error' });
 //   }
 // });
+// router.post('/login', async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+    
+//     // Validate required fields
+//     if (!email || !password) {
+//       return res.status(400).json({ message: 'Email and password are required' });
+//     }
+
+//     // Find user by email
+//     const user = await User.findOne({ email: email });
+
+//     if (!user) {
+//       return res.status(400).json({ message: 'User not found' });
+//     }
+
+//     // Check password
+//     if (user.password !== password) {
+//       return res.status(400).json({ message: 'Invalid credentials' });
+//     }
+
+//     // Check if user needs verification
+//     const needsVerification = !user.panVerification.isVerified ||
+//                               !user.address ||
+//                               !user.aadhaarDocument.fileName ||
+//                               !user.agreementDocument.fileName;
+
+//     res.json({
+//       message: 'Login successful',
+//       userId: user._id,
+//       needsVerification: needsVerification,
+//       user: {
+//         firstName: user.firstName,
+//         lastName: user.lastName,
+//         roles: user.roles,
+//         phone: user.phone,
+//         email: user.email,
+        // isFullyVerified: user.isFullyVerified,
+        // creditCoins: user.creditCoins
+//       }
+//     });
+//   } catch (error) {
+//     console.error('Login error:', error);
+//     res.status(500).json({ message: 'Server error' });
+//   }
+// });
+
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    // Validate required fields
+
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email and password are required' 
+      });
     }
 
     // Find user by email
-    const user = await User.findOne({ email: email });
-
+    const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'User not found' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid email or password' 
+      });
     }
 
     // Check password
-    if (user.password !== password) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid email or password' 
+      });
     }
 
-    // Check if user needs verification
+    // Check if subscription is expired
+    const isExpired = user.isSubscriptionExpired();
+    const daysRemaining = user.getDaysRemaining();
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: user._id, 
+        email: user.email,
+        selectedPlan: user.selectedPlan 
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '30d' }
+    );
+
     const needsVerification = !user.panVerification.isVerified ||
                               !user.address ||
                               !user.aadhaarDocument.fileName ||
                               !user.agreementDocument.fileName;
+    // Return user data without password
+    const userResponse = {
+      _id: user._id,
+      firstname: user.firstname,
+      lastname: user.lastname,
+      phone: user.phone,
+      email: user.email,
+      selectedPlan: user.selectedPlan,
+      planTitle: user.planTitle,
+      planPrice: user.planPrice,
+      validity: user.validity,
+      daysRemaining,
+                  needsVerification: needsVerification,
+        creditCoins: user.creditCoins,
+      isActive: user.isActive && !isExpired,
+      isExpired,
+      creditCoins: user.creditCoins,
+      roles: user.roles
+    };
 
+    // res.json({
+    //   success: true,
+    //   message: 'Login successful',
+    //   token,
+    //   user: userResponse
+      
+    // });
     res.json({
-      message: 'Login successful',
-      userId: user._id,
-      needsVerification: needsVerification,
-      user: {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        roles: user.roles,
-        phone: user.phone,
-        email: user.email,
-        isFullyVerified: user.isFullyVerified,
-        creditCoins: user.creditCoins
-      }
-    });
+  success: true,
+  message: 'Login successful',
+  token,
+  
+  userId: user._id,  // Add this line
+  needsVerification,  // Add this line
+  user: userResponse
+});
+
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error during login',
+      error: error.message 
+    });
   }
 });
 module.exports = router;

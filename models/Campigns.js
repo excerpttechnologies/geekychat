@@ -38,6 +38,21 @@ const CampaignSchema = new mongoose.Schema({
   phoneNumberId: { type: String, required: true },
   templateName: { type: String, required: true },
   headerType: { type: String, required: true },
+  paymentDetails: [{
+    paymentId: { type: String, required: true }, // Razorpay payment ID
+    orderId: { type: String, required: true }, // Razorpay order ID
+    amount: { type: Number, required: true }, // Amount paid in rupees
+    currency: { type: String, default: 'INR' },
+    contactCount: { type: Number, required: true }, // Number of contacts for this payment
+    headerType: { type: String, required: true }, // Header type for this payment
+    ratePerContact: { type: Number, required: true }, // Rate charged per contact
+    paymentStatus: { type: String, enum: ['pending', 'success', 'failed'], default: 'pending' },
+    paymentMethod: { type: String }, // card, netbanking, wallet, etc.
+    paidAt: { type: Date },
+    razorpaySignature: { type: String }, // For verification
+    transactionId: { type: String }, // Bank transaction ID if available
+    createdAt: { type: Date, default: Date.now }
+  }],
   contacts: [{ type: String }],
   status: { type: String, default: 'sent' },
   scheduleDate: { type: String },
