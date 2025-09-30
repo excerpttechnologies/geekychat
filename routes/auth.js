@@ -584,19 +584,121 @@ router.get('/user/:userId', async (req, res) => {
 // Get all users
 
 // Approve user
+// router.patch('/:userId/approve', async (req, res) => {
+//   try {
+//     const user = await User.findByIdAndUpdate(
+//       req.params.userId,
+//       { isFullyVerified: true },
+//       { new: true }
+//     );
+//     res.json({ message: 'User approved', user });
+//   } catch (error) {
+//     res.status(500).json({ message: 'Server error' });
+//   }
+// });
+// Approve user with WhatsApp Business configuration
 router.patch('/:userId/approve', async (req, res) => {
   try {
+    const { 
+      isFullyVerified, 
+      metaBusinessId, 
+      accountId, 
+      phoneNumbers // Array of { phoneNumberId, phoneNumber, displayName, verifiedName }
+    } = req.body;
+
+    // Validate required fields when approving
+    if (isFullyVerified) {
+      if (!metaBusinessId || !accountId || !phoneNumbers || phoneNumbers.length === 0) {
+        return res.status(400).json({ 
+          message: 'Meta Business ID, Account ID, and at least one phone number are required for approval' 
+        });
+      }
+
+      // Validate phone numbers array
+      for (const phone of phoneNumbers) {
+        if (!phone.phoneNumberId || !phone.phoneNumber) {
+          return res.status(400).json({ 
+            message: 'Each phone number must have phoneNumberId and phoneNumber' 
+          });
+        }
+      }
+    }
+
+    const updateData = {
+      isFullyVerified,
+      ...(isFullyVerified && {
+        'whatsappBusiness.metaBusinessId': metaBusinessId,
+        'whatsappBusiness.accountId': accountId,
+        'whatsappBusiness.phoneNumbers': phoneNumbers.map(phone => ({
+          phoneNumberId: phone.phoneNumberId,
+          phoneNumber: phone.phoneNumber,
+          displayName: phone.displayName || '',
+          verifiedName: phone.verifiedName || '',
+          isActive: true,
+          addedAt: new Date()
+        }))
+      })
+    };
+
     const user = await User.findByIdAndUpdate(
       req.params.userId,
-      { isFullyVerified: true },
+      updateData,
       { new: true }
-    );
-    res.json({ message: 'User approved', user });
+    ).select('-password');
+
+    res.json({ 
+      message: isFullyVerified ? 'User approved and WhatsApp Business configured' : 'User status updated', 
+      user 
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    console.error('Approval error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
+// Update WhatsApp Business configuration
+router.patch('/:userId/whatsapp-config', async (req, res) => {
+  try {
+    const { metaBusinessId, accountId, phoneNumbers } = req.body;
 
+    const user = await User.findById(req.params.userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.isFullyVerified) {
+      return res.status(400).json({ message: 'User must be verified first' });
+    }
+
+    const updateData = {};
+    if (metaBusinessId) updateData['whatsappBusiness.metaBusinessId'] = metaBusinessId;
+    if (accountId) updateData['whatsappBusiness.accountId'] = accountId;
+    if (phoneNumbers) {
+      updateData['whatsappBusiness.phoneNumbers'] = phoneNumbers.map(phone => ({
+        phoneNumberId: phone.phoneNumberId,
+        phoneNumber: phone.phoneNumber,
+        displayName: phone.displayName || '',
+        verifiedName: phone.verifiedName || '',
+        isActive: phone.isActive !== undefined ? phone.isActive : true,
+        addedAt: phone.addedAt || new Date()
+      }));
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.userId,
+      updateData,
+      { new: true }
+    ).select('-password');
+
+    res.json({ 
+      message: 'WhatsApp Business configuration updated', 
+      user: updatedUser 
+    });
+  } catch (error) {
+    console.error('Config update error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 // View/Download documents
 // View documents - Enhanced with proper headers
 router.get('/documents/view', (req, res) => {
@@ -1181,6 +1283,18 @@ router.post('/login', async (req, res) => {
       message: 'Internal server error during login',
       error: error.message 
     });
+  }
+});
+// Get user by phone number
+router.get('/user/phone/:phone', async (req, res) => {
+  try {
+    const user = await User.findOne({ phone: req.params.phone });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 });
 module.exports = router;

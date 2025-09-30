@@ -34,6 +34,7 @@
 const mongoose = require('mongoose');
 
 const CampaignSchema = new mongoose.Schema({
+  campaignId: { type: String, required: true, unique: true }, // e.g., "promo_march_2025_001"
   campaignName: { type: String, required: true },
   phoneNumberId: { type: String, required: true },
   templateName: { type: String, required: true },

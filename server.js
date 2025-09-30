@@ -9,7 +9,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const nodemailer =require ("nodemailer");
 const xlsx = require("xlsx");
-
+const CampaignPayment = require("./models/CampaignPayment");
 const multer = require("multer");
 const axios = require("axios");
 const fs = require("fs");
@@ -42,10 +42,8 @@ app.get('/api/campaigns/detailed', async (req, res) => {
   try {
     const campaigns = await Campaign.find()
       .sort({ createdAt: -1 })
-      .populate('messageDetails')
       .lean();
     
-    // Calculate enhanced stats for each campaign
     const enhancedCampaigns = campaigns.map(campaign => {
       const messageDetails = campaign.messageDetails || [];
       
@@ -63,8 +61,13 @@ app.get('/api/campaigns/detailed', async (req, res) => {
         ? (stats.successfulMessages / stats.totalContacts) * 100 
         : 0;
       
+      // Extract campaignId from campaignName
+      const campaignId = campaign.parentCampaign || 
+                         campaign.campaignName.replace(/_batch_\d+$/, '').replace(/_SUMMARY$/, '');
+      
       return {
         ...campaign,
+        campaignId, // Add this field
         stats
       };
     });
@@ -207,96 +210,302 @@ const apiVersion = "v23.0";
 
 // Updated backend code for handling templates
 
-// Create Template Endpoint (Updated)
-app.post("/create-template", upload.single("file"), async (req, res) => {
-  const { templateName, headerType, bodyText, footerText, headerText } = req.body;
-  const file = req.file;
+// // Create Template Endpoint (Updated)
+// app.post("/create-template", upload.single("file"), async (req, res) => {
+//   const { templateName, headerType, bodyText, footerText, headerText } = req.body;
+//   const file = req.file;
 
-  if (!templateName) {
-    return res.status(400).json({ error: "Template name is required." });
+//   if (!templateName) {
+//     return res.status(400).json({ error: "Template name is required." });
+//   }
+
+//   try {
+//     let headerComponent = null;
+
+//     // If header requires file (IMAGE, VIDEO, DOCUMENT)
+//     if (headerType !== "TEXT" && file) {
+//       // Step 1: Upload session
+//       const sessionRes = await axios.post(
+//         `https://graph.facebook.com/${apiVersion}/${appId}/uploads`,
+//         null,
+//         {
+//           params: {
+//             file_name: file.originalname,
+//             file_length: file.size,
+//             file_type: file.mimetype,
+//             access_token: accessToken,
+//           },
+//         }
+//       );
+
+//       const uploadSessionId = sessionRes.data.id;
+
+//       // Step 2: Upload binary
+//       const fileBuffer = fs.readFileSync(file.path);
+//       const uploadRes = await axios.post(
+//         `https://graph.facebook.com/${apiVersion}/${uploadSessionId}`,
+//         fileBuffer,
+//         {
+//           headers: {
+//             Authorization: `OAuth ${accessToken}`,
+//             "file_offset": "0",
+//             "Content-Type": "application/octet-stream",
+//           },
+//         }
+//       );
+
+//       const fileHandle = uploadRes.data.h;
+
+//       // Step 3: Build header component
+//       headerComponent = {
+//         type: "HEADER",
+//         format: headerType, // IMAGE | VIDEO | DOCUMENT
+//         example: { header_handle: [fileHandle] },
+//       };
+
+//       // cleanup file
+//       fs.unlinkSync(file.path);
+//     } else if (headerType === "TEXT") {
+//       // Text header - use separate headerText field
+//       headerComponent = {
+//         type: "HEADER",
+//         format: "TEXT",
+//         text: headerText?.trim() || "Header text", // Use headerText instead of bodyText
+//       };
+//     }
+
+//     // Body component - always use bodyText
+//     const bodyComponent = {
+//       type: "BODY",
+//       text: bodyText || "Hello, this is a body text.",
+//     };
+
+//     // Footer component (optional)
+//     const footerComponent =
+//       footerText && footerText.trim()
+//         ? {
+//             type: "FOOTER",
+//             text: footerText.trim(),
+//           }
+//         : null;
+
+//     const components = [headerComponent, bodyComponent];
+//     if (footerComponent) components.push(footerComponent);
+
+//     // Step 4: Create template
+//     const templateRes = await axios.post(
+//       `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
+//       {
+//         name: templateName,
+//         language: "en_US",
+//         category: "MARKETING",
+//         components,
+//       },
+//       {
+//         headers: {
+//           Authorization: `Bearer ${accessToken}`,
+//         },
+//       }
+//     );
+
+//     res.json({ success: true, data: templateRes.data });
+//   } catch (err) {
+//     console.error("❌ Error creating template:", err.response?.data || err.message);
+//     res.status(500).json({ error: err.response?.data || err.message });
+//   }
+// });
+app.post("/create-template", upload.single("file"), async (req, res) => {
+  const {
+    templateName,
+    headerType,
+    bodyText,
+    footerText,
+    headerText,
+    category,
+    buttons,
+    bodyVariables
+  } = req.body;
+
+  // Validation...
+  if (!templateName || !bodyText) {
+    return res.status(400).json({ error: "Missing required fields" });
   }
 
   try {
-    let headerComponent = null;
+    const components = [];
 
-    // If header requires file (IMAGE, VIDEO, DOCUMENT)
-    if (headerType !== "TEXT" && file) {
-      // Step 1: Upload session
-      const sessionRes = await axios.post(
-        `https://graph.facebook.com/${apiVersion}/${appId}/uploads`,
-        null,
-        {
-          params: {
-            file_name: file.originalname,
-            file_length: file.size,
-            file_type: file.mimetype,
-            access_token: accessToken,
-          },
-        }
-      );
-
-      const uploadSessionId = sessionRes.data.id;
-
-      // Step 2: Upload binary
-      const fileBuffer = fs.readFileSync(file.path);
-      const uploadRes = await axios.post(
-        `https://graph.facebook.com/${apiVersion}/${uploadSessionId}`,
-        fileBuffer,
-        {
-          headers: {
-            Authorization: `OAuth ${accessToken}`,
-            "file_offset": "0",
-            "Content-Type": "application/octet-stream",
-          },
-        }
-      );
-
-      const fileHandle = uploadRes.data.h;
-
-      // Step 3: Build header component
-      headerComponent = {
-        type: "HEADER",
-        format: headerType, // IMAGE | VIDEO | DOCUMENT
-        example: { header_handle: [fileHandle] },
-      };
-
-      // cleanup file
-      fs.unlinkSync(file.path);
-    } else if (headerType === "TEXT") {
-      // Text header - use separate headerText field
-      headerComponent = {
+    // 1. HEADER Component
+    if (headerType === "TEXT" && headerText) {
+      components.push({
         type: "HEADER",
         format: "TEXT",
-        text: headerText?.trim() || "Header text", // Use headerText instead of bodyText
+        text: headerText.trim()
+      });
+    } else if (headerType !== "TEXT" && req.file) {
+      const headerComponent = {
+        type: "HEADER",
+        format: headerType,
+        example: {
+          header_handle: [req.file.path]
+        }
       };
+      components.push(headerComponent);
     }
 
-    // Body component - always use bodyText
-    const bodyComponent = {
-      type: "BODY",
-      text: bodyText || "Hello, this is a body text.",
+    // 2. BODY Component
+    // const bodyComponent = {
+    //   type: "BODY",
+    //   text: bodyText.trim()
+    // };
+// 2. BODY Component
+const bodyComponent = {
+  type: "BODY",
+  text: bodyText.trim()
+};
+
+// Extract variables from body text ({{1}}, {{2}}, etc.)
+const variableMatches = bodyText.match(/\{\{\d+\}\}/g);
+
+if (variableMatches && variableMatches.length > 0) {
+  // Create example array with one value per variable
+  const exampleValues = variableMatches.map((match, index) => {
+    // Use bodyVariables if provided, otherwise use generic samples
+    if (bodyVariables) {
+      const vars = JSON.parse(bodyVariables);
+      return vars[index] ? `Sample ${vars[index]}` : `Sample text ${index + 1}`;
+    }
+    return `Sample text ${index + 1}`;
+  });
+  
+  bodyComponent.example = {
+    body_text: [exampleValues] // Must be array of array
+  };
+}
+
+components.push(bodyComponent);
+    if (bodyVariables && JSON.parse(bodyVariables).length > 0) {
+      const vars = JSON.parse(bodyVariables);
+      bodyComponent.example = {
+        body_text: [vars.map((v, i) => `Sample ${v}`)]
+      };
+    }
+    //components.push(bodyComponent);
+
+    // 3. FOOTER Component (optional)
+    if (footerText?.trim()) {
+      components.push({
+        type: "FOOTER",
+        text: footerText.trim()
+      });
+    }
+
+    // 4. BUTTONS Component - with validation
+    let buttonCount = 0;
+    // if (buttons) {
+    //   const parsedButtons = JSON.parse(buttons);
+    //   buttonCount = parsedButtons.length;
+     
+    //   if (parsedButtons.length > 0) {
+    //     // Validate buttons before sending
+    //     for (const btn of parsedButtons) {
+    //       if (btn.type === "PHONE_NUMBER") {
+    //         const phone = btn.phone_number?.trim();
+    //         if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+    //           return res.status(400).json({
+    //             error: `Invalid phone number format for button "${btn.text}". Use E.164 format (e.g., +919876543210)`
+    //           });
+    //         }
+    //       }
+
+    //       if (btn.type === "URL") {
+    //         const url = btn.url?.trim();
+    //         if (!url || !url.startsWith('http')) {
+    //           return res.status(400).json({
+    //             error: `Invalid URL for button "${btn.text}". Must start with http:// or https://`
+    //           });
+    //         }
+    //       }
+    //     }
+
+    //     const buttonComponent = {
+    //       type: "BUTTONS",
+    //       buttons: parsedButtons.map(btn => {
+    //         const whatsappButton = {
+    //           type: btn.type,
+    //           text: btn.text.trim()
+    //         };
+            
+    //         if (btn.type === "PHONE_NUMBER") {
+    //           whatsappButton.phone_number = btn.phone_number.trim();
+    //         } else if (btn.type === "URL") {
+    //           whatsappButton.url = btn.url.trim();
+    //         }
+            
+    //         return whatsappButton;
+    //       })
+    //     };
+    //     components.push(buttonComponent);
+    //   }
+    // }
+
+    // Create template
+   
+   // 4. BUTTONS Component - CORRECT WAY
+if (buttons) {
+  const parsedButtons = JSON.parse(buttons);
+  buttonCount = parsedButtons.length;
+  
+  if (parsedButtons.length > 0) {
+    // Validate all buttons first
+    for (const btn of parsedButtons) {
+      if (btn.type === "PHONE_NUMBER") {
+        const phone = btn.phone_number?.trim();
+        if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+          return res.status(400).json({
+            error: `Invalid phone number format for button "${btn.text}". Use E.164 format (e.g., +919876543210)`
+          });
+        }
+      }
+      if (btn.type === "URL") {
+        const url = btn.url?.trim();
+        if (!url || !url.startsWith('http')) {
+          return res.status(400).json({
+            error: `Invalid URL for button "${btn.text}". Must start with http:// or https://`
+          });
+        }
+      }
+    }
+    
+    // ✅ Create ONE BUTTONS component with ALL buttons inside
+    const buttonComponent = {
+      type: "BUTTONS",
+      buttons: parsedButtons.map(btn => {
+        const whatsappButton = {
+          type: btn.type,
+          text: btn.text.trim()
+        };
+        
+        if (btn.type === "PHONE_NUMBER") {
+          whatsappButton.phone_number = btn.phone_number.trim();
+        } else if (btn.type === "URL") {
+          whatsappButton.url = btn.url.trim();
+        }
+        
+        return whatsappButton;
+      })
     };
-
-    // Footer component (optional)
-    const footerComponent =
-      footerText && footerText.trim()
-        ? {
-            type: "FOOTER",
-            text: footerText.trim(),
-          }
-        : null;
-
-    const components = [headerComponent, bodyComponent];
-    if (footerComponent) components.push(footerComponent);
-
-    // Step 4: Create template
+    
+    components.push(buttonComponent);  // Add once, not in a loop
+  }
+}
+   
     const templateRes = await axios.post(
       `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
       {
-        name: templateName,
+        name: templateName.trim(),
         language: "en_US",
-        category: "MARKETING",
-        components,
+        category: category || "MARKETING",
+        components
       },
       {
         headers: {
@@ -305,10 +514,17 @@ app.post("/create-template", upload.single("file"), async (req, res) => {
       }
     );
 
-    res.json({ success: true, data: templateRes.data });
+    res.json({
+      success: true,
+      data: templateRes.data,
+      message: `${category} template created successfully with ${buttonCount} buttons!`
+    });
   } catch (err) {
     console.error("❌ Error creating template:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data || err.message });
+    res.status(500).json({
+      error: err.response?.data?.error?.message || err.message,
+      details: err.response?.data
+    });
   }
 });
 
@@ -1398,7 +1614,16 @@ app.post('/api/campaigns/verify-payment', async (req, res) => {
         error: 'Campaign data is required'
       });
     }
+// const campaignId = `${campaignData.campaignName}_${String(Date.now()).slice(-6)}`;
+// Extract phone number and clean it
+const phoneNumber = campaignData.selectedPhoneNumber || '';
+console.log('Selected phone number for campaign ID generation:', phoneNumber);
+const cleanedPhone = phoneNumber.replace(/[^0-9]/g, ''); // Remove +, spaces, etc.
+const last5Digits = cleanedPhone.slice(-5);
 
+const today = new Date();
+const ddmm = String(today.getDate()).padStart(2, '0') + String(today.getMonth() + 1).padStart(2, '0');
+const campaignId = `${last5Digits}-${ddmm}-${campaignData.campaignName}`;
     // Verify Razorpay signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
@@ -1423,7 +1648,8 @@ app.post('/api/campaigns/verify-payment', async (req, res) => {
     const totalAmount = campaignData.contacts ? campaignData.contacts.length * ratePerContact : 0;
 
     // Create campaign with payment details
-    const campaign = new Campaign({
+    const campaign = new CampaignPayment({
+        campaignId: campaignId,
       campaignName: campaignData.campaignName,
       phoneNumberId: campaignData.phoneNumberId,
       templateName: campaignData.templateName,
@@ -1696,20 +1922,25 @@ app.post('/api/campaigns/batch', async (req, res) => {
       stats
     } = req.body;
 
-    // Find the original campaign with payment details
-    const originalCampaign = await Campaign.findOne({
-      campaignName: parentCampaign,
-      userPhone: userPhone,
-      paymentDetails: { $exists: true, $ne: [] } // Ensure payment details exist and not empty
-    }).sort({ createdAt: -1 }); // Get the latest one
 
-    console.log('Found original campaign:', originalCampaign ? 'Yes' : 'No');
+
+ 
+    // Extract payment details from original campaign
+    
+const originalCampaign = await CampaignPayment.findOne({
+  campaignName: parentCampaign,
+  userPhone: userPhone,
+  paymentDetails: { $exists: true, $ne: [] }
+}).sort({ createdAt: -1 });
+   console.log('Found original campaign:', originalCampaign ? 'Yes' : 'No');
     console.log('Payment details found:', originalCampaign?.paymentDetails?.length || 0);
 
-    // Extract payment details from original campaign
-    const paymentDetails = originalCampaign?.paymentDetails || [];
-
+// Extract campaignId and payment details
+const campaignId = originalCampaign?.campaignId;
+console.log('Using campaignId:', campaignId);
+const paymentDetails = originalCampaign?.paymentDetails || [];
     const campaign = new Campaign({
+       campaignId: campaignId,
       campaignName,
       templateName,
       phoneNumberId,

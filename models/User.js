@@ -106,7 +106,21 @@ const userSchema = new mongoose.Schema({
     pincode: { type: String, required: true },
     country: { type: String, required: true, default: 'India' }
   },
+  // Add these fields to your userSchema
   
+  // WhatsApp Business Configuration (added after verification)
+  whatsappBusiness: {
+    metaBusinessId: { type: String, default: "" },
+    accountId: { type: String, default: "" },
+    phoneNumbers: [{
+      phoneNumberId: { type: String, required: true },
+      phoneNumber: { type: String, required: true },
+      displayName: { type: String, default: "" },
+      verifiedName: { type: String, default: "" },
+      isActive: { type: Boolean, default: true },
+      addedAt: { type: Date, default: Date.now }
+    }]
+  },
   // WhatsApp API details (optional per user)
   accessToken: { type: String, default: "" },
   apiVersion: { type: String, default: "v23.0" },

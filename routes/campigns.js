@@ -84,74 +84,74 @@ const upload = multer({ storage });
 //     res.status(500).json({ success: false, error: "Server Error" });
 //   }
 // });
-router.post("/batch", async (req, res) => {
-  try {
-    const {
-      campaignName,
-      phoneNumberId,
-      templateName,
-      headerType,
-      contacts,
-      status,
-      messageDetails,
-      userPhone,
-      batchNumber,
-      parentCampaign,
-      stats
-    } = req.body;
+// router.post("/batch", async (req, res) => {
+//   try {
+//     const {
+//       campaignName,
+//       phoneNumberId,
+//       templateName,
+//       headerType,
+//       contacts,
+//       status,
+//       messageDetails,
+//       userPhone,
+//       batchNumber,
+//       parentCampaign,
+//       stats
+//     } = req.body;
 
-    // Create smaller payload for large campaigns
-    const batchCampaign = new Campaign({
-      campaignName,
-      phoneNumberId,
-      templateName,
-      headerType,
-      contacts: Array.isArray(contacts) ? contacts : [],
-      status: status || 'partial',
-      messageDetails: Array.isArray(messageDetails) ? messageDetails : [],
-      userPhone,
-      batchNumber,
-      parentCampaign,
-      stats: stats || {
-        totalContacts: contacts?.length || 0,
-        successfulMessages: messageDetails?.filter(msg => msg.status === 'sent').length || 0,
-        failedMessages: messageDetails?.filter(msg => msg.status === 'failed').length || 0,
-        successRate: 0
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
+//     // Create smaller payload for large campaigns
+//     const batchCampaign = new Campaign({
+//       campaignName,
+//       phoneNumberId,
+//       templateName,
+//       headerType,
+//       contacts: Array.isArray(contacts) ? contacts : [],
+//       status: status || 'partial',
+//       messageDetails: Array.isArray(messageDetails) ? messageDetails : [],
+//       userPhone,
+//       batchNumber,
+//       parentCampaign,
+//       stats: stats || {
+//         totalContacts: contacts?.length || 0,
+//         successfulMessages: messageDetails?.filter(msg => msg.status === 'sent').length || 0,
+//         failedMessages: messageDetails?.filter(msg => msg.status === 'failed').length || 0,
+//         successRate: 0
+//       },
+//       createdAt: new Date(),
+//       updatedAt: new Date()
+//     });
     
-    await batchCampaign.save();
+//     await batchCampaign.save();
    
-    console.log(`✅ Batch campaign saved:`, {
-      campaignName,
-      batchNumber,
-      status,
-      contacts: contacts?.length || 0,
-      messageDetails: messageDetails?.length || 0,
-      stats
-    });
+//     console.log(`✅ Batch campaign saved:`, {
+//       campaignName,
+//       batchNumber,
+//       status,
+//       contacts: contacts?.length || 0,
+//       messageDetails: messageDetails?.length || 0,
+//       stats
+//     });
     
-    res.json({ 
-      success: true, 
-      campaign: {
-        _id: batchCampaign._id,
-        campaignName: batchCampaign.campaignName,
-        batchNumber: batchCampaign.batchNumber,
-        status: batchCampaign.status,
-        stats: batchCampaign.stats
-      }
-    });
-  } catch (err) {
-    console.error("❌ Error creating batch campaign:", err);
-    res.status(500).json({ 
-      success: false, 
-      error: "Server Error",
-      message: err.message 
-    });
-  }
-});
+//     res.json({ 
+//       success: true, 
+//       campaign: {
+//         _id: batchCampaign._id,
+//         campaignName: batchCampaign.campaignName,
+//         batchNumber: batchCampaign.batchNumber,
+//         status: batchCampaign.status,
+//         stats: batchCampaign.stats
+//       }
+//     });
+//   } catch (err) {
+//     console.error("❌ Error creating batch campaign:", err);
+//     res.status(500).json({ 
+//       success: false, 
+//       error: "Server Error",
+//       message: err.message 
+//     });
+//   }
+// });
 
 // Route to get all batches of a campaign
 router.get("/batches/:parentCampaign", async (req, res) => {
