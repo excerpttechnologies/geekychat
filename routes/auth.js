@@ -320,8 +320,21 @@ const razorpay = new Razorpay({
 const planDurationMapping = {
   monthly: 30,
   quarterly: 90,
-  'half-yearly': 180,
+  //'half-yearly': 180,
   yearly: 365,
+  free: 30,
+  'essentials-1000': 30,
+  'essentials-2500': 30,
+  'essentials-5000': 30,
+  'essentials-7500': 30,
+  'essentials-10000': 30,
+  'essentials-15000': 30,
+  'essentials-20000': 30,
+  'essentials-25000': 30,
+  'essentials-30000': 30,
+  'essentials-40000': 30,
+  'essentials-50000': 30,
+  fixed: 30,
 };
 
 // Helper function to calculate validity date
