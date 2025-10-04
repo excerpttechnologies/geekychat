@@ -108,7 +108,20 @@ const userSchema = new mongoose.Schema({
   },
   // Add these fields to your userSchema
   // In your User model/schema
+// Business type
+businessType: {
+  type: String,
+  enum: ['registered', 'non-registered'],
+  default: 'non-registered'
+},
 
+// GST details (for registered businesses)
+gstNumber: { type: String, default: "" },
+gstCertificate: {
+  fileName: { type: String, default: "" },
+  filePath: { type: String, default: "" },
+  uploadDate: { type: Date }
+},
 
   creditBalance: Number,  // Will be initialized to 0 if missing
 

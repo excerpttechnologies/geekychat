@@ -23,8 +23,8 @@ const campaignRoutes = require("./routes/campigns");
 const history = require('connect-history-api-fallback');
 const app = express();
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_qUmhUFElBiSNIs',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS',
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_live_RLnseEsSC5ALZV',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || 'MpHy42DVgGXt1c3vjIb5SuQl',
 });
 app.use(cors()); 
 app.use(express.json());
@@ -5215,6 +5215,7 @@ app.get('/api/profile', async (req, res) => {
       gender: user.gender || '',
       dateOfBirth: user.dateOfBirth || '',
       panCardNumber: user.panCardNumber || '',
+      isFullyVerified: user.isFullyVerified || false,
       billingAddress: user.billingAddress || {
         fullName: '',
         address: '',
@@ -5413,6 +5414,254 @@ app.get('/api/dashboard', async (req, res) => {
       message: 'Server error', 
       error: error.message 
     });
+  }
+});
+
+
+
+const PricingPlanSchema = new mongoose.Schema({
+  planId: { type: String, required: true, unique: true },
+  planTitle: { type: String, required: true },
+  price: { type: Number, required: true },
+  timeline: { type: String, required: true },
+  durationInDays: { type: Number, required: true },
+  description: { type: String, required: true },
+  features: [{
+    label: { type: String, required: true },
+    isActive: { type: Boolean, default: true }
+  }],
+  dynamicFields: [{
+    id: { type: String, required: true },
+    label: { type: String, required: true },
+    content: { type: String, required: true },
+    displayType: { type: String, enum: ['single', 'points'], required: true }
+  }],
+  isActive: { type: Boolean, default: true },
+  order: { type: Number, default: 0 }
+}, { timestamps: true });
+
+// Schema for Contact Tiers (Essentials Plan)
+const ContactTierSchema = new mongoose.Schema({
+  contacts: { type: Number, required: true, unique: true },
+  price: { type: Number, required: true },
+  heading: { type: String, },
+  features: [{ type: String }],
+  additionalfeatures: [{
+    title: { type: String, required: true },
+    items: [{ type: String }]
+  }],
+}, { timestamps: true });
+
+// Shared Features Schema (for Essentials and Premium)
+const SharedFeaturesSchema = new mongoose.Schema({
+  type: { type: String, enum: ['advanced', 'premium'], required: true },
+  features: [{ type: String }]
+}, { timestamps: true });
+
+// Models
+const PricingPlan = mongoose.model('PricingPlan', PricingPlanSchema);
+const ContactTier = mongoose.model('ContactTier', ContactTierSchema);
+const SharedFeatures = mongoose.model('SharedFeatures', SharedFeaturesSchema);
+
+// ==================== PRICING PLANS ROUTES ====================
+
+// GET all pricing plans
+app.get('/api/pricing-plans', async (req, res) => {
+  try {
+    const plans = await PricingPlan.find().sort({ order: 1 });
+    res.json(plans);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET single pricing plan
+app.get('/api/pricing-plans/:id', async (req, res) => {
+  try {
+    const plan = await PricingPlan.findById(req.params.id);
+    if (!plan) {
+      return res.status(404).json({ message: 'Plan not found' });
+    }
+    res.json(plan);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST create new pricing plan
+app.post('/api/pricing-plans', async (req, res) => {
+  try {
+    const plan = new PricingPlan(req.body);
+    const savedPlan = await plan.save();
+    res.status(201).json(savedPlan);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// PUT update pricing plan
+app.put('/api/pricing-plans/:id', async (req, res) => {
+  try {
+    const updatedPlan = await PricingPlan.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!updatedPlan) {
+      return res.status(404).json({ message: 'Plan not found' });
+    }
+    res.json(updatedPlan);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// DELETE pricing plan
+app.delete('/api/pricing-plans/:id', async (req, res) => {
+  try {
+    const deletedPlan = await PricingPlan.findByIdAndDelete(req.params.id);
+    if (!deletedPlan) {
+      return res.status(404).json({ message: 'Plan not found' });
+    }
+    res.json({ message: 'Plan deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ==================== CONTACT TIERS ROUTES ====================
+
+// GET all contact tiers
+app.get('/api/contact-tiers', async (req, res) => {
+  try {
+    const tiers = await ContactTier.find().sort({ contacts: 1 });
+    res.json(tiers);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET single contact tier
+app.get('/api/contact-tiers/:id', async (req, res) => {
+  try {
+    const tier = await ContactTier.findById(req.params.id);
+    if (!tier) {
+      return res.status(404).json({ message: 'Tier not found' });
+    }
+    res.json(tier);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET contact tier by contact count
+app.get('/api/contact-tiers/by-contacts/:contacts', async (req, res) => {
+  try {
+    const tier = await ContactTier.findOne({ contacts: req.params.contacts });
+    if (!tier) {
+      return res.status(404).json({ message: 'Tier not found' });
+    }
+    res.json(tier);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST create new contact tier
+app.post('/api/contact-tiers', async (req, res) => {
+  try {
+    const tier = new ContactTier(req.body);
+    console.log("tier",tier)
+    const savedTier = await tier.save();
+    res.status(201).json(savedTier);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// PUT update contact tier
+app.put('/api/contact-tiers/:id', async (req, res) => {
+  try {
+    const updatedTier = await ContactTier.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!updatedTier) {
+      return res.status(404).json({ message: 'Tier not found' });
+    }
+    res.json(updatedTier);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// DELETE contact tier
+app.delete('/api/contact-tiers/:id', async (req, res) => {
+  try {
+    const deletedTier = await ContactTier.findByIdAndDelete(req.params.id);
+    if (!deletedTier) {
+      return res.status(404).json({ message: 'Tier not found' });
+    }
+    res.json({ message: 'Tier deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ==================== SHARED FEATURES ROUTES ====================
+
+// GET shared features by type
+app.get('/api/shared-features/:type', async (req, res) => {
+  try {
+    const features = await SharedFeatures.findOne({ type: req.params.type });
+    if (!features) {
+      return res.status(404).json({ message: 'Features not found' });
+    }
+    res.json(features);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST/PUT shared features
+app.post('/api/shared-features', async (req, res) => {
+  try {
+    const { type, features } = req.body;
+    const existingFeatures = await SharedFeatures.findOne({ type });
+    
+    if (existingFeatures) {
+      existingFeatures.features = features;
+      const updated = await existingFeatures.save();
+      res.json(updated);
+    } else {
+      const newFeatures = new SharedFeatures({ type, features });
+      const saved = await newFeatures.save();
+      res.status(201).json(saved);
+    }
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ==================== COMBINED PRICING DATA ROUTE ====================
+
+// GET complete pricing data for frontend
+app.get('/api/pricing-data', async (req, res) => {
+  try {
+    const plans = await PricingPlan.find({ isActive: true }).sort({ order: 1 });
+    const contactTiers = await ContactTier.find().sort({ contacts: 1 });
+    const advancedShared = await SharedFeatures.findOne({ type: 'advanced' });
+    const premiumShared = await SharedFeatures.findOne({ type: 'premium' });
+
+    res.json({
+      plans,
+      contactTiers,
+      advancedShared: advancedShared ? advancedShared.features : [],
+      premiumShared: premiumShared ? premiumShared.features : []
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 app.use(history());

@@ -312,8 +312,8 @@ const upload = multer({
 // });
 
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_qUmhUFElBiSNIs',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS',
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_live_RLnseEsSC5ALZV',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || 'MpHy42DVgGXt1c3vjIb5SuQl',
 });
 
 // Plan configuration with duration mapping
@@ -437,7 +437,7 @@ router.post('/register', async (req, res) => {
       billingAddress,
       shippingAddress
     } = req.body;
-
+console.log("req .reg.body",req.body);
     // Validation
     if (!firstname || !lastname || !phone || !email || !password || 
         !selectedPlan || !planTitle || !planPrice || !paymentId) {
@@ -804,13 +804,14 @@ router.get('/documents/download', (req, res) => {
 // Get user details for verification page
 
 
-// Update user verification details
 router.post('/verify-user', upload.fields([
   { name: 'aadhaarDocument', maxCount: 1 },
-  { name: 'agreementDocument', maxCount: 1 }
+  { name: 'agreementDocument', maxCount: 1 },
+  { name: 'gstCertificate', maxCount: 1 }  
 ]), async (req, res) => {
   try {
-    const { userId, address, gender, dateOfBirth, panCardNumber } = req.body;
+    const { userId, businessType, gstNumber, address, gender, dateOfBirth, panCardNumber } = req.body;
+    console.log("req.veri.body", req.body);
     
     // First, get the current user to check if they were already verified
     const currentUser = await User.findById(userId);
@@ -821,40 +822,56 @@ router.post('/verify-user', upload.fields([
     const wasAlreadyVerified = currentUser.isFullyVerified;
     
     const updateData = {
-      address,
-      gender,
-      dateOfBirth: new Date(dateOfBirth),
-      panCardNumber,
-      // Hardcoded PAN verification for now
-      'panVerification.isVerified': true,
-      'panVerification.verificationName': req.body.firstName + ' ' + req.body.lastName
+      businessType: businessType || 'non-registered'
     };
 
-    // Handle file uploads
-    if (req.files.aadhaarDocument) {
-      updateData['aadhaarDocument.fileName'] = req.files.aadhaarDocument[0].originalname;
-      updateData['aadhaarDocument.filePath'] = req.files.aadhaarDocument[0].path;
-      updateData['aadhaarDocument.uploadDate'] = new Date();
+    // DECLARE willBeFullyVerified HERE
+    let willBeFullyVerified = false;
+
+    if (businessType === 'registered') {
+      updateData.gstNumber = gstNumber;
+      
+      if (req.files.gstCertificate) {
+        updateData['gstCertificate.fileName'] = req.files.gstCertificate[0].originalname;
+        updateData['gstCertificate.filePath'] = req.files.gstCertificate[0].path;
+        updateData['gstCertificate.uploadDate'] = new Date();
+      }
+      
+      willBeFullyVerified = gstNumber && req.files.gstCertificate;
+      
+    } else {
+      updateData.address = address;
+      updateData.gender = gender;
+      updateData.dateOfBirth = new Date(dateOfBirth);
+      updateData.panCardNumber = panCardNumber;
+      updateData['panVerification.isVerified'] = true;
+      updateData['panVerification.verificationName'] = req.body.firstName + ' ' + req.body.lastName;
+      
+      // Handle existing file uploads for non-registered
+      if (req.files.aadhaarDocument) {
+        updateData['aadhaarDocument.fileName'] = req.files.aadhaarDocument[0].originalname;
+        updateData['aadhaarDocument.filePath'] = req.files.aadhaarDocument[0].path;
+        updateData['aadhaarDocument.uploadDate'] = new Date();
+      }
+      
+      if (req.files.agreementDocument) {
+        updateData['agreementDocument.fileName'] = req.files.agreementDocument[0].originalname;
+        updateData['agreementDocument.filePath'] = req.files.agreementDocument[0].path;
+        updateData['agreementDocument.uploadDate'] = new Date();
+      }
+      
+      willBeFullyVerified = address && panCardNumber && req.files.aadhaarDocument && req.files.agreementDocument;
     }
 
-    if (req.files.agreementDocument) {
-      updateData['agreementDocument.fileName'] = req.files.agreementDocument[0].originalname;
-      updateData['agreementDocument.filePath'] = req.files.agreementDocument[0].path;
-      updateData['agreementDocument.uploadDate'] = new Date();
-    }
-
-    // Check if user will be fully verified after this update
-    const willBeFullyVerified = updateData.address && 
-                               updateData.panCardNumber && 
-                               req.files.aadhaarDocument && 
-                               req.files.agreementDocument;
+    // REMOVE THE DUPLICATE CODE BELOW (lines after this comment in your original code)
+    // The file handling is already done in the if-else block above
 
     if (willBeFullyVerified) {
       // updateData.isFullyVerified = true;
       
-      // Add 50 credits ONLY if user wasn't already verified
+      // Add 25 credits ONLY if user wasn't already verified
       if (!wasAlreadyVerified) {
-        updateData.$inc = { creditCoins: 25 }; // Use MongoDB's $inc operator to add 50 credits
+        updateData.$inc = { creditCoins: 25 };
       }
     }
 
@@ -863,14 +880,13 @@ router.post('/verify-user', upload.fields([
     // Prepare response message
     let message = 'Verification details updated successfully';
     if (willBeFullyVerified && !wasAlreadyVerified) {
-      message += '. 50 credits have been added to your account!';
+      message += '. 25 credits have been added to your account!';
     }
     
     res.status(200).json({
       message: message,
-      // isFullyVerified: user.isFullyVerified,
       creditCoins: user.creditCoins,
-      creditsAdded: willBeFullyVerified && !wasAlreadyVerified ? 50 : 0
+      creditsAdded: willBeFullyVerified && !wasAlreadyVerified ? 25 : 0
     });
   } catch (error) {
     console.error(error);
@@ -1260,6 +1276,7 @@ router.post('/login', async (req, res) => {
       phone: user.phone,
       email: user.email,
       selectedPlan: user.selectedPlan,
+      isFullyVerified: user.isFullyVerified,
       planTitle: user.planTitle,
       planPrice: user.planPrice,
       validity: user.validity,
