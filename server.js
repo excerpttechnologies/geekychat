@@ -425,6 +425,220 @@ const apiVersion = "v23.0";
 //     res.status(500).json({ error: err.response?.data || err.message });
 //   }
 // });
+// app.post("/create-template", upload.single("file"), async (req, res) => {
+//   const {
+//     templateName,
+//     headerType,
+//     bodyText,
+//     footerText,
+//     headerText,
+//     category,
+//     buttons,
+//     bodyVariables
+//   } = req.body;
+
+//   // Validation...
+//   if (!templateName || !bodyText) {
+//     return res.status(400).json({ error: "Missing required fields" });
+//   }
+
+//   try {
+//     const components = [];
+
+//     // 1. HEADER Component
+//     if (headerType === "TEXT" && headerText) {
+//       components.push({
+//         type: "HEADER",
+//         format: "TEXT",
+//         text: headerText.trim()
+//       });
+//     } else if (headerType !== "TEXT" && req.file) {
+//       const headerComponent = {
+//         type: "HEADER",
+//         format: headerType,
+//         example: {
+//           header_handle: [req.file.path]
+//         }
+//       };
+//       components.push(headerComponent);
+//     }
+
+//     // 2. BODY Component
+//     // const bodyComponent = {
+//     //   type: "BODY",
+//     //   text: bodyText.trim()
+//     // };
+// // 2. BODY Component
+// const bodyComponent = {
+//   type: "BODY",
+//   text: bodyText.trim()
+// };
+
+// // Extract variables from body text ({{1}}, {{2}}, etc.)
+// const variableMatches = bodyText.match(/\{\{\d+\}\}/g);
+
+// if (variableMatches && variableMatches.length > 0) {
+//   // Create example array with one value per variable
+//   const exampleValues = variableMatches.map((match, index) => {
+//     // Use bodyVariables if provided, otherwise use generic samples
+//     if (bodyVariables) {
+//       const vars = JSON.parse(bodyVariables);
+//       return vars[index] ? `Sample ${vars[index]}` : `Sample text ${index + 1}`;
+//     }
+//     return `Sample text ${index + 1}`;
+//   });
+  
+//   bodyComponent.example = {
+//     body_text: [exampleValues] // Must be array of array
+//   };
+// }
+
+// components.push(bodyComponent);
+//     if (bodyVariables && JSON.parse(bodyVariables).length > 0) {
+//       const vars = JSON.parse(bodyVariables);
+//       bodyComponent.example = {
+//         body_text: [vars.map((v, i) => `Sample ${v}`)]
+//       };
+//     }
+//     //components.push(bodyComponent);
+
+//     // 3. FOOTER Component (optional)
+//     if (footerText?.trim()) {
+//       components.push({
+//         type: "FOOTER",
+//         text: footerText.trim()
+//       });
+//     }
+
+//     // 4. BUTTONS Component - with validation
+//     let buttonCount = 0;
+//     // if (buttons) {
+//     //   const parsedButtons = JSON.parse(buttons);
+//     //   buttonCount = parsedButtons.length;
+     
+//     //   if (parsedButtons.length > 0) {
+//     //     // Validate buttons before sending
+//     //     for (const btn of parsedButtons) {
+//     //       if (btn.type === "PHONE_NUMBER") {
+//     //         const phone = btn.phone_number?.trim();
+//     //         if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+//     //           return res.status(400).json({
+//     //             error: `Invalid phone number format for button "${btn.text}". Use E.164 format (e.g., +919876543210)`
+//     //           });
+//     //         }
+//     //       }
+
+//     //       if (btn.type === "URL") {
+//     //         const url = btn.url?.trim();
+//     //         if (!url || !url.startsWith('http')) {
+//     //           return res.status(400).json({
+//     //             error: `Invalid URL for button "${btn.text}". Must start with http:// or https://`
+//     //           });
+//     //         }
+//     //       }
+//     //     }
+
+//     //     const buttonComponent = {
+//     //       type: "BUTTONS",
+//     //       buttons: parsedButtons.map(btn => {
+//     //         const whatsappButton = {
+//     //           type: btn.type,
+//     //           text: btn.text.trim()
+//     //         };
+            
+//     //         if (btn.type === "PHONE_NUMBER") {
+//     //           whatsappButton.phone_number = btn.phone_number.trim();
+//     //         } else if (btn.type === "URL") {
+//     //           whatsappButton.url = btn.url.trim();
+//     //         }
+            
+//     //         return whatsappButton;
+//     //       })
+//     //     };
+//     //     components.push(buttonComponent);
+//     //   }
+//     // }
+
+//     // Create template
+   
+//    // 4. BUTTONS Component - CORRECT WAY
+// if (buttons) {
+//   const parsedButtons = JSON.parse(buttons);
+//   buttonCount = parsedButtons.length;
+  
+//   if (parsedButtons.length > 0) {
+//     // Validate all buttons first
+//     for (const btn of parsedButtons) {
+//       if (btn.type === "PHONE_NUMBER") {
+//         const phone = btn.phone_number?.trim();
+//         if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+//           return res.status(400).json({
+//             error: `Invalid phone number format for button "${btn.text}". Use E.164 format (e.g., +919876543210)`
+//           });
+//         }
+//       }
+//       if (btn.type === "URL") {
+//         const url = btn.url?.trim();
+//         if (!url || !url.startsWith('http')) {
+//           return res.status(400).json({
+//             error: `Invalid URL for button "${btn.text}". Must start with http:// or https://`
+//           });
+//         }
+//       }
+//     }
+    
+//     // ✅ Create ONE BUTTONS component with ALL buttons inside
+//     const buttonComponent = {
+//       type: "BUTTONS",
+//       buttons: parsedButtons.map(btn => {
+//         const whatsappButton = {
+//           type: btn.type,
+//           text: btn.text.trim()
+//         };
+        
+//         if (btn.type === "PHONE_NUMBER") {
+//           whatsappButton.phone_number = btn.phone_number.trim();
+//         } else if (btn.type === "URL") {
+//           whatsappButton.url = btn.url.trim();
+//         }
+        
+//         return whatsappButton;
+//       })
+//     };
+    
+//     components.push(buttonComponent);  // Add once, not in a loop
+//   }
+// }
+   
+//     const templateRes = await axios.post(
+//       `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
+//       {
+//         name: templateName.trim(),
+//         language: "en_US",
+//         category: category || "MARKETING",
+//         components
+//       },
+//       {
+//         headers: {
+//           Authorization: `Bearer ${accessToken}`,
+//         },
+//       }
+//     );
+
+//     res.json({
+//       success: true,
+//       data: templateRes.data,
+//       message: `${category} template created successfully with ${buttonCount} buttons!`
+//     });
+//   } catch (err) {
+//     console.error("❌ Error creating template:", err.response?.data || err.message);
+//     res.status(500).json({
+//       error: err.response?.data?.error?.message || err.message,
+//       details: err.response?.data
+//     });
+//   }
+// });
+
 app.post("/create-template", upload.single("file"), async (req, res) => {
   const {
     templateName,
@@ -437,186 +651,182 @@ app.post("/create-template", upload.single("file"), async (req, res) => {
     bodyVariables
   } = req.body;
 
-  // Validation...
+  const file = req.file;
+
+  // Validation
   if (!templateName || !bodyText) {
-    return res.status(400).json({ error: "Missing required fields" });
+    return res.status(400).json({ error: "Template name and body text are required." });
   }
 
   try {
     const components = [];
+    let headerComponent = null;
 
+    // =====================
     // 1. HEADER Component
-    if (headerType === "TEXT" && headerText) {
-      components.push({
+    // =====================
+    if (headerType !== "TEXT" && file) {
+      // Step 1: Create upload session
+      const sessionRes = await axios.post(
+        `https://graph.facebook.com/${apiVersion}/${appId}/uploads`,
+        null,
+        {
+          params: {
+            file_name: file.originalname,
+            file_length: file.size,
+            file_type: file.mimetype,
+            access_token: accessToken,
+          },
+        }
+      );
+
+      const uploadSessionId = sessionRes.data.id;
+
+      // Step 2: Upload binary data
+      const fileBuffer = fs.readFileSync(file.path);
+      const uploadRes = await axios.post(
+        `https://graph.facebook.com/${apiVersion}/${uploadSessionId}`,
+        fileBuffer,
+        {
+          headers: {
+            Authorization: `OAuth ${accessToken}`,
+            "file_offset": "0",
+            "Content-Type": "application/octet-stream",
+          },
+        }
+      );
+
+      const fileHandle = uploadRes.data.h;
+
+      // Step 3: Build header component with file handle
+      headerComponent = {
+        type: "HEADER",
+        format: headerType, // IMAGE | VIDEO | DOCUMENT
+        example: { header_handle: [fileHandle] },
+      };
+
+      // Cleanup temp file
+      fs.unlinkSync(file.path);
+    } else if (headerType === "TEXT" && headerText) {
+      // Text header
+      headerComponent = {
         type: "HEADER",
         format: "TEXT",
-        text: headerText.trim()
-      });
-    } else if (headerType !== "TEXT" && req.file) {
-      const headerComponent = {
-        type: "HEADER",
-        format: headerType,
-        example: {
-          header_handle: [req.file.path]
-        }
+        text: headerText.trim().substring(0, 60), // Meta limit: 60 chars
       };
+    }
+
+    // Add header if exists
+    if (headerComponent) {
       components.push(headerComponent);
     }
 
+    // =====================
     // 2. BODY Component
-    // const bodyComponent = {
-    //   type: "BODY",
-    //   text: bodyText.trim()
-    // };
-// 2. BODY Component
-const bodyComponent = {
-  type: "BODY",
-  text: bodyText.trim()
-};
+    // =====================
+    const bodyComponent = {
+      type: "BODY",
+      text: bodyText.trim(),
+    };
 
-// Extract variables from body text ({{1}}, {{2}}, etc.)
-const variableMatches = bodyText.match(/\{\{\d+\}\}/g);
+    // Handle body variables ({{1}}, {{2}}, etc.)
+    const variableMatches = bodyText.match(/\{\{\d+\}\}/g);
+    if (variableMatches && variableMatches.length > 0) {
+      const exampleValues = variableMatches.map((match, index) => {
+        if (bodyVariables) {
+          try {
+            const vars = JSON.parse(bodyVariables);
+            return vars[index] || `Sample text ${index + 1}`;
+          } catch (e) {
+            return `Sample text ${index + 1}`;
+          }
+        }
+        return `Sample text ${index + 1}`;
+      });
 
-if (variableMatches && variableMatches.length > 0) {
-  // Create example array with one value per variable
-  const exampleValues = variableMatches.map((match, index) => {
-    // Use bodyVariables if provided, otherwise use generic samples
-    if (bodyVariables) {
-      const vars = JSON.parse(bodyVariables);
-      return vars[index] ? `Sample ${vars[index]}` : `Sample text ${index + 1}`;
-    }
-    return `Sample text ${index + 1}`;
-  });
-  
-  bodyComponent.example = {
-    body_text: [exampleValues] // Must be array of array
-  };
-}
-
-components.push(bodyComponent);
-    if (bodyVariables && JSON.parse(bodyVariables).length > 0) {
-      const vars = JSON.parse(bodyVariables);
       bodyComponent.example = {
-        body_text: [vars.map((v, i) => `Sample ${v}`)]
+        body_text: [exampleValues], // Array of array
       };
     }
-    //components.push(bodyComponent);
 
-    // 3. FOOTER Component (optional)
-    if (footerText?.trim()) {
+    components.push(bodyComponent);
+
+    // =====================
+    // 3. FOOTER Component
+    // =====================
+    if (footerText && footerText.trim()) {
       components.push({
         type: "FOOTER",
-        text: footerText.trim()
+        text: footerText.trim(),
       });
     }
 
-    // 4. BUTTONS Component - with validation
+    // =====================
+    // 4. BUTTONS Component
+    // =====================
     let buttonCount = 0;
-    // if (buttons) {
-    //   const parsedButtons = JSON.parse(buttons);
-    //   buttonCount = parsedButtons.length;
-     
-    //   if (parsedButtons.length > 0) {
-    //     // Validate buttons before sending
-    //     for (const btn of parsedButtons) {
-    //       if (btn.type === "PHONE_NUMBER") {
-    //         const phone = btn.phone_number?.trim();
-    //         if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
-    //           return res.status(400).json({
-    //             error: `Invalid phone number format for button "${btn.text}". Use E.164 format (e.g., +919876543210)`
-    //           });
-    //         }
-    //       }
+    if (buttons) {
+      try {
+        const parsedButtons = JSON.parse(buttons);
+        buttonCount = parsedButtons.length;
 
-    //       if (btn.type === "URL") {
-    //         const url = btn.url?.trim();
-    //         if (!url || !url.startsWith('http')) {
-    //           return res.status(400).json({
-    //             error: `Invalid URL for button "${btn.text}". Must start with http:// or https://`
-    //           });
-    //         }
-    //       }
-    //     }
+        if (parsedButtons.length > 0) {
+          // Validate all buttons first
+          for (const btn of parsedButtons) {
+            if (btn.type === "PHONE_NUMBER") {
+              const phone = btn.phone_number?.trim();
+              if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+                return res.status(400).json({
+                  error: `Invalid phone number format for button "${btn.text}". Use E.164 format (e.g., +919876543210)`,
+                });
+              }
+            }
+            if (btn.type === "URL") {
+              const url = btn.url?.trim();
+              if (!url || !url.startsWith("http")) {
+                return res.status(400).json({
+                  error: `Invalid URL for button "${btn.text}". Must start with http:// or https://`,
+                });
+              }
+            }
+          }
 
-    //     const buttonComponent = {
-    //       type: "BUTTONS",
-    //       buttons: parsedButtons.map(btn => {
-    //         const whatsappButton = {
-    //           type: btn.type,
-    //           text: btn.text.trim()
-    //         };
-            
-    //         if (btn.type === "PHONE_NUMBER") {
-    //           whatsappButton.phone_number = btn.phone_number.trim();
-    //         } else if (btn.type === "URL") {
-    //           whatsappButton.url = btn.url.trim();
-    //         }
-            
-    //         return whatsappButton;
-    //       })
-    //     };
-    //     components.push(buttonComponent);
-    //   }
-    // }
+          // Create buttons component with all buttons
+          const buttonComponent = {
+            type: "BUTTONS",
+            buttons: parsedButtons.map((btn) => {
+              const whatsappButton = {
+                type: btn.type,
+                text: btn.text.trim(),
+              };
 
-    // Create template
-   
-   // 4. BUTTONS Component - CORRECT WAY
-if (buttons) {
-  const parsedButtons = JSON.parse(buttons);
-  buttonCount = parsedButtons.length;
-  
-  if (parsedButtons.length > 0) {
-    // Validate all buttons first
-    for (const btn of parsedButtons) {
-      if (btn.type === "PHONE_NUMBER") {
-        const phone = btn.phone_number?.trim();
-        if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
-          return res.status(400).json({
-            error: `Invalid phone number format for button "${btn.text}". Use E.164 format (e.g., +919876543210)`
-          });
+              if (btn.type === "PHONE_NUMBER") {
+                whatsappButton.phone_number = btn.phone_number.trim();
+              } else if (btn.type === "URL") {
+                whatsappButton.url = btn.url.trim();
+              }
+
+              return whatsappButton;
+            }),
+          };
+
+          components.push(buttonComponent);
         }
-      }
-      if (btn.type === "URL") {
-        const url = btn.url?.trim();
-        if (!url || !url.startsWith('http')) {
-          return res.status(400).json({
-            error: `Invalid URL for button "${btn.text}". Must start with http:// or https://`
-          });
-        }
+      } catch (e) {
+        console.error("Error parsing buttons:", e);
       }
     }
-    
-    // ✅ Create ONE BUTTONS component with ALL buttons inside
-    const buttonComponent = {
-      type: "BUTTONS",
-      buttons: parsedButtons.map(btn => {
-        const whatsappButton = {
-          type: btn.type,
-          text: btn.text.trim()
-        };
-        
-        if (btn.type === "PHONE_NUMBER") {
-          whatsappButton.phone_number = btn.phone_number.trim();
-        } else if (btn.type === "URL") {
-          whatsappButton.url = btn.url.trim();
-        }
-        
-        return whatsappButton;
-      })
-    };
-    
-    components.push(buttonComponent);  // Add once, not in a loop
-  }
-}
-   
+
+    // =====================
+    // 5. Create Template
+    // =====================
     const templateRes = await axios.post(
       `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
       {
         name: templateName.trim(),
         language: "en_US",
         category: category || "MARKETING",
-        components
+        components,
       },
       {
         headers: {
@@ -628,16 +838,21 @@ if (buttons) {
     res.json({
       success: true,
       data: templateRes.data,
-      message: `${category} template created successfully with ${buttonCount} buttons!`
+      message: `Template created successfully with ${buttonCount} button(s)!`,
     });
   } catch (err) {
     console.error("❌ Error creating template:", err.response?.data || err.message);
     res.status(500).json({
       error: err.response?.data?.error?.message || err.message,
-      details: err.response?.data
+      details: err.response?.data,
     });
   }
 });
+
+
+
+ 0.115
+
 // ADD THIS NEW ENDPOINT TO YOUR EXISTING BACKEND CODE
 
 // ADD THIS NEW ENDPOINT TO YOUR EXISTING BACKEND CODE
@@ -1458,7 +1673,7 @@ const WebhookData = mongoose.model('WebhookData', webhookDataSchema);
 //     }
 
 //     // Calculate refund
-//     const refundPerMessage = campaign.headerType === 'TEXT' ? 1 : 1.5;
+//     const refundPerMessage = campaign.headerType === 'TEXT' ? 1 : 0.7846;
 //     const totalRefund = failedCount * refundPerMessage;
 
 //     // Find user
@@ -1734,7 +1949,7 @@ app.post('/api/campaigns/update-status', async (req, res) => {
 //       ).length;
 
 //       // Refund calculation
-//       const refundMultiplier = campaign.headerType === "TEXT" ? 1 : 1.5;
+//       const refundMultiplier = campaign.headerType === "TEXT" ? 1 : 0.7846;
 //       const refundAmount = failedCount * refundMultiplier;
       
 //       console.log(`Calculated refund for campaign ${campaign.campaignId}: ${failedCount} failed * ${refundMultiplier} = ${refundAmount}`);
@@ -1836,7 +2051,7 @@ app.post('/api/campaigns/update-status', async (req, res) => {
 //     }
 
 //     // Calculate refund
-//     const refundPerMessage = campaign.headerType === 'TEXT' ? 1 : 1.5;
+//     const refundPerMessage = campaign.headerType === 'TEXT' ? 1 : 0.7846;
 //     const totalRefund = failedCount * refundPerMessage;
 
 //     // Find user
@@ -1960,7 +2175,7 @@ async function updateUserCampaignHistory(campaignId) {
 
         // Calculate refund amount
         const headerType = allBatches[0].headerType;
-        const refundMultiplier = headerType === "TEXT" ? 1 : 1.5;
+        const refundMultiplier = headerType === "TEXT" ? 0.115 : 0.7846;
         const refundAmount = totalFailed * refundMultiplier;
 
         // Update user history with aggregated counts
@@ -2052,7 +2267,7 @@ app.post('/api/campaigns/sync-user-history', async (req, res) => {
       const campaignName = firstBatch.campaignName?.replace(/_batch_\d+$/, '') || firstBatch.parentCampaign || firstBatch.campaignName;
       
       // Refund calculation
-      const refundMultiplier = headerType === "TEXT" ? 1 : 1.5;
+      const refundMultiplier = headerType === "TEXT" ? 0.115 : 0.7846;
       const refundAmount = totalFailed * refundMultiplier;
       
       console.log(`Calculated refund for campaign ${campaignId} (${batches.length} batches): ${totalFailed} failed * ${refundMultiplier} = ${refundAmount}`);
@@ -2374,7 +2589,7 @@ app.post('/api/campaigns/update-status', async (req, res) => {
             
 //         //     // Only refund if status is changing from pending/sent to failed
 //         //     if (messageDetail && messageDetail.status !== 'failed') {
-//         //         const refundAmount = campaign.headerType === 'TEXT' ? 1 : 1.5;
+//         //         const refundAmount = campaign.headerType === 'TEXT' ? 1 : 0.7846;
                 
 //         //         const user = await User.findOne({ phone: campaign.userPhone });
 //         //         console.log(`user phone: ${campaign.userPhone}`);
@@ -2410,7 +2625,7 @@ app.post('/api/campaigns/update-status', async (req, res) => {
 
 //             // Refund only if status changed newly to failed
 //             if (messageDetail && messageDetail.status === 'failed' && !messageDetail.refunded) {
-//                 const refundAmount = updatedCampaign.headerType === 'TEXT' ? 1 : 1.5;
+//                 const refundAmount = updatedCampaign.headerType === 'TEXT' ? 1 : 0.7846;
 
 //                 const user = await User.findOne({ phone: updatedCampaign.userPhone });
 //                 if (user) {
@@ -2611,7 +2826,7 @@ app.post('/api/campaigns/update-status', async (req, res) => {
 //       case 'IMAGE':
 //       case 'VIDEO':
 //       case 'DOCUMENT':
-//         ratePerContact = 1.5; // 1.5 rupees for media messages
+//         ratePerContact = 0.7846; // 0.7846 rupees for media messages
 //         break;
 //       default:
 //         ratePerContact = 1; // Default to text rate
@@ -2643,7 +2858,7 @@ app.post('/api/campaigns/update-status', async (req, res) => {
 //   try {
 //     const { contactCount, headerType, creditBalance = 0 } = req.body;
     
-//     let ratePerContact = headerType.toUpperCase() === 'TEXT' ? 1 : 1.5;
+//     let ratePerContact = headerType.toUpperCase() === 'TEXT' ? 1 : 0.7846;
 //     const totalAmount = Math.round(contactCount * ratePerContact * 100) / 100;
     
 //     // Apply credit balance
@@ -2701,7 +2916,7 @@ app.get('/api/user/refund-balance/:userPhone', async (req, res) => {
 //     const { contactCount, headerType } = req.body;
 //     const userPhone = req.body.userPhone || req.headers['user-phone'];
     
-//     const ratePerContact = headerType === 'TEXT' ? 1 : 1.5;
+//     const ratePerContact = headerType === 'TEXT' ? 1 : 0.7846;
 //     let totalAmount = contactCount * ratePerContact;
     
 //     // Fetch user's credit balance
@@ -2736,7 +2951,7 @@ app.post('/api/campaigns/calculate-cost', async (req, res) => {
     const { contactCount, headerType } = req.body;
     const userPhone = req.body.userPhone || req.headers['user-phone'];
     
-    const ratePerContact = headerType === 'TEXT' ? 1 : 1.5;
+    const ratePerContact = headerType === 'TEXT' ? 0.115 : 0.7846;
     
 let totalAmount = contactCount * ratePerContact;
 
@@ -2794,7 +3009,7 @@ app.post('/api/campaigns/create-order', async (req, res) => {
     }
 
     // Calculate amount
-    const ratePerContact = headerType.toUpperCase() === 'TEXT' ? 1 : 1.5;
+    const ratePerContact = headerType.toUpperCase() === 'TEXT' ? 0.115 : 0.7846;
     const totalAmount = finalAmount || (contactCount * ratePerContact); 
     const amountInPaise = Math.round(totalAmount * 100); // Convert to paise for Razorpay
     
@@ -2920,7 +3135,7 @@ app.post('/api/campaigns/create-order', async (req, res) => {
 //     const payment = await razorpay.payments.fetch(razorpay_payment_id);
     
 //     // Calculate payment details
-//     const ratePerContact = campaignData.headerType === 'TEXT' ? 1 : 1.5;
+//     const ratePerContact = campaignData.headerType === 'TEXT' ? 1 : 0.7846;
 //     const totalAmount = campaignData.contacts ? campaignData.contacts.length * ratePerContact : 0;
 // // After payment verification success, before creating campaign
 // const user = await User.findOne({ phone: campaignData.userPhone });
@@ -3094,7 +3309,7 @@ app.post('/api/campaigns/verify-payment', async (req, res) => {
     }
     
     // Calculate payment details
-    const ratePerContact = campaignData.headerType === 'TEXT' ? 1 : 1.5;
+    const ratePerContact = campaignData.headerType === 'TEXT' ? 0.115 : 0.7846;
     const totalAmount = campaignData.contacts ? campaignData.contacts.length * ratePerContact : 0;
 
     // Find user and process refund deduction
@@ -3273,7 +3488,7 @@ app.post('/api/campaigns/verify-payment', async (req, res) => {
 //       if (failedCount === 0) continue;
 
 //       // Calculate refund amount
-//       const ratePerContact = campaign.headerType === 'TEXT' ? 1 : 1.5;
+//       const ratePerContact = campaign.headerType === 'TEXT' ? 1 : 0.7846;
 //       const refundAmount = failedCount * ratePerContact;
 
 //       // Find payment details for this campaign
