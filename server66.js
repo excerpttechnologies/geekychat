@@ -1119,124 +1119,78 @@ app.delete("/delete-template/:name", async (req, res) => {
 
 // ------------------ UPDATE TEMPLATE ------------------
 // ✅ Update Template (Safe Approach: create new template if name changes)
-// app.put("/update-template/:name", upload.single("file"), async (req, res) => {
-//   const { name } = req.params;
-//   const { newName, headerType, bodyText, footerText } = req.body;
-//   const file = req.file;
-
-//   try {
-//     // Step 1: Build header component
-//     let headerComponent = null;
-
-//     if (headerType !== "TEXT" && file) {
-//       // Upload media file
-//       const sessionRes = await axios.post(
-//         `https://graph.facebook.com/${apiVersion}/${appId}/uploads`,
-//         null,
-//         {
-//           params: {
-//             file_name: file.originalname,
-//             file_length: file.size,
-//             file_type: file.mimetype,
-//             access_token: accessToken,
-//           },
-//         }
-//       );
-
-//       const uploadSessionId = sessionRes.data.id;
-//       const fileBuffer = fs.readFileSync(file.path);
-
-//       const uploadRes = await axios.post(
-//         `https://graph.facebook.com/${apiVersion}/${uploadSessionId}`,
-//         fileBuffer,
-//         {
-//           headers: {
-//             Authorization: `OAuth ${accessToken}`,
-//             "file_offset": "0",
-//             "Content-Type": "application/octet-stream",
-//           },
-//         }
-//       );
-
-//       const fileHandle = uploadRes.data.h;
-
-//       headerComponent = {
-//         type: "HEADER",
-//         format: headerType,
-//         example: { header_handle: [fileHandle] },
-//       };
-
-//       fs.unlinkSync(file.path);
-//     } else if (headerType === "TEXT") {
-//       headerComponent = {
-//         type: "HEADER",
-//         format: "TEXT",
-//         text: bodyText?.substring(0, 60) || "Header text",
-//       };
-//     }
-
-//     // Step 2: Body + Footer
-  
-
-//     const footerComponent =
-//       footerText && footerText.trim()
-//         ? { type: "FOOTER", text: footerText.trim() }
-//         : null;
-
-//     const components = [headerComponent, bodyComponent];
-//     if (footerComponent) components.push(footerComponent);
-
-//     // Step 3: Create new template (with new name if provided)
-//     const templateRes = await axios.post(
-//       `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
-//       {
-//         name: newName || `${name}_v2`, // ✅ ensure new name
-//         language: "en_US",
-//         category: "MARKETING",
-//         components,
-//       },
-//       {
-//         headers: { Authorization: `Bearer ${accessToken}` },
-//       }
-//     );
-
-//     res.json({ success: true, data: templateRes.data });
-//   } catch (err) {
-//     console.error("❌ Error updating template:", err.response?.data || err.message);
-//     res.status(500).json({ error: err.response?.data || err.message });
-//   }
-// });
-
 app.put("/update-template/:name", upload.single("file"), async (req, res) => {
   const { name } = req.params;
-  const { newName, headerType, headerText, bodyText, footerText } = req.body;
+  const { newName, headerType, bodyText, footerText } = req.body;
   const file = req.file;
 
   try {
+    // Step 1: Build header component
     let headerComponent = null;
 
     if (headerType !== "TEXT" && file) {
-      // media upload logic ...
+      // Upload media file
+      const sessionRes = await axios.post(
+        `https://graph.facebook.com/${apiVersion}/${appId}/uploads`,
+        null,
+        {
+          params: {
+            file_name: file.originalname,
+            file_length: file.size,
+            file_type: file.mimetype,
+            access_token: accessToken,
+          },
+        }
+      );
+
+      const uploadSessionId = sessionRes.data.id;
+      const fileBuffer = fs.readFileSync(file.path);
+
+      const uploadRes = await axios.post(
+        `https://graph.facebook.com/${apiVersion}/${uploadSessionId}`,
+        fileBuffer,
+        {
+          headers: {
+            Authorization: `OAuth ${accessToken}`,
+            "file_offset": "0",
+            "Content-Type": "application/octet-stream",
+          },
+        }
+      );
+
+      const fileHandle = uploadRes.data.h;
+
+      headerComponent = {
+        type: "HEADER",
+        format: headerType,
+        example: { header_handle: [fileHandle] },
+      };
+
+      fs.unlinkSync(file.path);
     } else if (headerType === "TEXT") {
       headerComponent = {
         type: "HEADER",
         format: "TEXT",
-        text: headerText?.substring(0, 60) || "Header text",
+        text: bodyText?.substring(0, 60) || "Header text",
       };
     }
 
-    const bodyComponent = { type: "BODY", text: bodyText || "Body text" };
+    // Step 2: Body + Footer
+  
 
     const footerComponent =
-      footerText && footerText.trim() ? { type: "FOOTER", text: footerText.trim() } : null;
+      footerText && footerText.trim()
+        ? { type: "FOOTER", text: footerText.trim() }
+        : null;
 
     const components = [headerComponent, bodyComponent];
     if (footerComponent) components.push(footerComponent);
 
+    // Step 3: Create new template (with new name if provided)
     const templateRes = await axios.post(
       `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
       {
-        name: newName || `${name}_v2`,
+        name: newName || `${name}_v2`, // ✅ ensure new name
         language: "en_US",
         category: "MARKETING",
         components,
