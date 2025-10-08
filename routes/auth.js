@@ -312,8 +312,14 @@ const upload = multer({
 // });
 
 const razorpay = new Razorpay({
+
+  //original keys
   key_id: process.env.RAZORPAY_KEY_ID || 'rzp_live_RLnseEsSC5ALZV',
   key_secret: process.env.RAZORPAY_KEY_SECRET || 'MpHy42DVgGXt1c3vjIb5SuQl',
+
+  //testing
+  //  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_qUmhUFElBiSNIs',
+  // key_secret: process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS',
 });
 
 // Plan configuration with duration mapping

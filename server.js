@@ -23,8 +23,14 @@ const campaignRoutes = require("./routes/campigns");
 const history = require('connect-history-api-fallback');
 const app = express();
 const razorpay = new Razorpay({
+  // original keys
   key_id: process.env.RAZORPAY_KEY_ID || 'rzp_live_RLnseEsSC5ALZV',
   key_secret: process.env.RAZORPAY_KEY_SECRET || 'MpHy42DVgGXt1c3vjIb5SuQl',
+//testing
+  //   key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_qUmhUFElBiSNIs',
+  // key_secret: process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS',
+
+
 });
 app.use(cors()); 
 app.use(express.json());
@@ -851,7 +857,7 @@ app.post("/create-template", upload.single("file"), async (req, res) => {
 
 
 
- 0.115
+ 
 
 // ADD THIS NEW ENDPOINT TO YOUR EXISTING BACKEND CODE
 
@@ -2176,7 +2182,7 @@ async function updateUserCampaignHistory(campaignId) {
         // Calculate refund amount
         const headerType = allBatches[0].headerType;
         const refundMultiplier = headerType === "TEXT" ? 0.115 : 0.7846;
-        const refundAmount = totalFailed * refundMultiplier;
+        const refundAmount = Math.round(totalFailed * refundMultiplier);
 
         // Update user history with aggregated counts
         await User.findOneAndUpdate(
@@ -2268,7 +2274,7 @@ app.post('/api/campaigns/sync-user-history', async (req, res) => {
       
       // Refund calculation
       const refundMultiplier = headerType === "TEXT" ? 0.115 : 0.7846;
-      const refundAmount = totalFailed * refundMultiplier;
+      const refundAmount = Math.round(totalFailed * refundMultiplier);
       
       console.log(`Calculated refund for campaign ${campaignId} (${batches.length} batches): ${totalFailed} failed * ${refundMultiplier} = ${refundAmount}`);
 
@@ -2953,7 +2959,7 @@ app.post('/api/campaigns/calculate-cost', async (req, res) => {
     
     const ratePerContact = headerType === 'TEXT' ? 0.115 : 0.7846;
     
-let totalAmount = contactCount * ratePerContact;
+let totalAmount = Math.round(contactCount * ratePerContact);
 
 const user = await User.findOne({ phone: userPhone });
 
@@ -3010,7 +3016,7 @@ app.post('/api/campaigns/create-order', async (req, res) => {
 
     // Calculate amount
     const ratePerContact = headerType.toUpperCase() === 'TEXT' ? 0.115 : 0.7846;
-    const totalAmount = finalAmount || (contactCount * ratePerContact); 
+    const totalAmount = Math.round(finalAmount || (contactCount * ratePerContact)); 
     const amountInPaise = Math.round(totalAmount * 100); // Convert to paise for Razorpay
     
     // Create Razorpay order
