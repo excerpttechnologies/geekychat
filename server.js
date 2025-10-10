@@ -964,7 +964,36 @@ app.get("/api/templates", async (req, res) => {
     });
   }
 });
+// Add this endpoint to your backend
+app.get("/api/library-templates", async (req, res) => {
+  const { category } = req.query;
+  
+  try {
+    const response = await axios.get(
+      `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
+      {
+        params: {
+          category: category || "AUTHENTICATION",
+          fields: "name,status,components,language,category",
+          limit: 100
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
 
+    res.json({
+      success: true,
+      data: response.data.data || []
+    });
+  } catch (error) {
+    console.error("Error fetching library templates:", error.response?.data || error.message);
+    res.status(500).json({
+      error: error.response?.data?.error?.message || error.message
+    });
+  }
+});
 // New Endpoint: Get Single Template Details
 app.get("/api/templates/:templateId", async (req, res) => {
   const { templateId } = req.params;
@@ -1307,6 +1336,9 @@ app.get("/list-templates", async (req, res) => {
       }
     );
     res.json(resp.data);
+    const templates = resp.data.data;
+    console.log("✅ Templates fetched successfully", templates.length);
+    console.log("✅ Fetched templates:", resp.data.length);
   } catch (err) {
     console.error("❌ Error fetching templates:", err.response?.data || err.message);
     res.status(500).json({ error: err.response?.data || err.message });
