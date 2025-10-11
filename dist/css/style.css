@@ -2434,7 +2434,7 @@ footer .top_footer .anim_line span:nth-child(2) {
     display: flex;
     align-items: center;
     position: relative;
-    margin-top: -96px;
+    /* margin-top: -96px; */
 }
 
 .bred_crumb .banner_shape2 {
@@ -2526,7 +2526,7 @@ header.fix_style.white_header {
     display: flex;
     align-items: center;
     position: relative;
-    margin-top: -96px;
+    /* margin-top: -96px; */
 }
 
 .bred_crumb::after {
