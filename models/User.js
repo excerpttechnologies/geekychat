@@ -70,25 +70,37 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true },
   
   // Plan and subscription details
-  selectedPlan: { 
-    type: String, 
-    //enum: ['monthly', 'quarterly', 'half-yearly', 'yearly'],
-    required: true 
-  },
+ plans: [{
+  selectedPlan: { type: String, },
   planTitle: { type: String, required: true },
   planPrice: { type: Number, required: true },
+  billingCycle: { type: String, enum: ['monthly', 'yearly'], required: true },
   validity: { type: Date, required: true },
-  daysRemaining: { type: Number, default: 0 }, // Virtual field for easier access
+   msgperday: { type: String, default: '' }, // ✅ Added field
+    totalbroadcasts: { type: String, default: '' }, // ✅ Added field
+  purchaseDate: { type: Date, default: Date.now },
   isActive: { type: Boolean, default: true },
-  
-  // Payment details
   paymentId: { type: String, required: true },
   paymentStatus: { 
     type: String, 
-    enum: ['pending', 'completed', 'failed'],
+    enum: ['pending', 'completed', 'failed', 'free'],
     default: 'completed' 
   },
+  overallusage:String,
+   dailyUsage: [{
+    date: { type: Date, default: Date.now },           // Which day
+    dailyUsedCount: { type: Number, default: 0 },      // Messages sent today
+    dailyUsageStatus: { 
+      type: String, 
+      enum: ['active', 'reached'], 
+      default: 'active' 
+    }                                                  // Status (limit reached or not)
+  }]
+}],
+currentPlan: { type: mongoose.Schema.Types.ObjectId }, 
+  isActive: { type: Boolean, default: true },
   
+ 
   // Billing and Shipping Address
   billingAddress: {
     fullName: { type: String, required: true },

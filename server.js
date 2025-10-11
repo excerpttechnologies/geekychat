@@ -22,13 +22,17 @@ const paymentRoutes = require("./routes/payment");
 const campaignRoutes = require("./routes/campigns");
 const history = require('connect-history-api-fallback');
 const app = express();
+
+const TopPlan =require("./models/TopPlan");
+const BottomPlan =require("./models/BottomPlan");
+const CustomSection =require("./models/CustomPlan");
 const razorpay = new Razorpay({
   // original keys
   key_id: process.env.RAZORPAY_KEY_ID || 'rzp_live_RLnseEsSC5ALZV',
   key_secret: process.env.RAZORPAY_KEY_SECRET || 'MpHy42DVgGXt1c3vjIb5SuQl',
 //testing
-  //   key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_qUmhUFElBiSNIs',
-  // key_secret: process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS',
+  //    key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_qUmhUFElBiSNIs',
+  //  key_secret: process.env.RAZORPAY_KEY_SECRET || 'wsBV1ts8yJPld9JktATIdOiS',
 
 
 });
@@ -3723,7 +3727,7 @@ app.get('/api/campaigns/status/:campaignId', async (req, res) => {
     });
   }
 });
-// 2. Route for batch campaign saving (for large campaigns)
+
 // app.post('/api/campaigns/batch', async (req, res) => {
 //   try {
 //     const {
@@ -3740,7 +3744,25 @@ app.get('/api/campaigns/status/:campaignId', async (req, res) => {
 //       stats
 //     } = req.body;
 
+
+
+ 
+//     // Extract payment details from original campaign
+    
+// const originalCampaign = await CampaignPayment.findOne({
+//   campaignName: parentCampaign,
+//   userPhone: userPhone,
+//   paymentDetails: { $exists: true, $ne: [] }
+// }).sort({ createdAt: -1 });
+//    console.log('Found original campaign:', originalCampaign ? 'Yes' : 'No');
+//     console.log('Payment details found:', originalCampaign?.paymentDetails?.length || 0);
+
+// // Extract campaignId and payment details
+// const campaignId = originalCampaign?.campaignId;
+// console.log('Using campaignId:', campaignId);
+// const paymentDetails = originalCampaign?.paymentDetails || [];
 //     const campaign = new Campaign({
+//        campaignId: campaignId,
 //       campaignName,
 //       templateName,
 //       phoneNumberId,
@@ -3752,22 +3774,293 @@ app.get('/api/campaigns/status/:campaignId', async (req, res) => {
 //       batchNumber,
 //       parentCampaign,
 //       stats,
+//       paymentDetails: paymentDetails, // Include payment details in batch
 //       createdAt: new Date(),
 //       updatedAt: new Date()
 //     });
 
 //     const savedCampaign = await campaign.save();
-//     res.json({ 
-//       success: true, 
+    
+//     console.log('Saved batch with payment details:', savedCampaign.paymentDetails.length);
+    
+//     res.json({
+//       success: true,
 //       campaign: savedCampaign,
-//       message: `Batch ${batchNumber} saved successfully`
+//       message: `Batch ${batchNumber} saved successfully with ${paymentDetails.length} payment details`
 //     });
 //   } catch (error) {
 //     console.error('Error saving batch campaign:', error);
-//     res.status(500).json({ 
-//       success: false, 
+//     res.status(500).json({
+//       success: false,
 //       error: 'Failed to save batch campaign',
-//       details: error.message 
+//       details: error.message
+//     });
+//   }
+// });
+// 3. Route for resending failed messages
+
+// app.post('/api/campaigns/batch', async (req, res) => {
+//   try {
+//     const {
+//       campaignName,
+//       templateName,
+//       phoneNumberId,
+//       headerType,
+//       contacts,
+//       messageDetails,
+//       status,
+//       userPhone,
+//       batchNumber,
+//       parentCampaign,
+//       stats
+//     } = req.body;
+
+//     // Extract payment details from original campaign
+//     const originalCampaign = await CampaignPayment.findOne({
+//       campaignName: parentCampaign,
+//       userPhone: userPhone,
+//       paymentDetails: { $exists: true, $ne: [] }
+//     }).sort({ createdAt: -1 });
+    
+//     console.log('Found original campaign:', originalCampaign ? 'Yes' : 'No');
+//     console.log('Payment details found:', originalCampaign?.paymentDetails?.length || 0);
+
+//     // Extract campaignId and payment details
+//     const campaignId = originalCampaign?.campaignId;
+//     console.log('Using campaignId:', campaignId);
+//     const paymentDetails = originalCampaign?.paymentDetails || [];
+    
+//     const campaign = new Campaign({
+//       campaignId: campaignId,
+//       campaignName,
+//       templateName,
+//       phoneNumberId,
+//       headerType,
+//       contacts: contacts || [],
+//       messageDetails: messageDetails || [],
+//       status,
+//       userPhone,
+//       batchNumber,
+//       parentCampaign,
+//       stats,
+//       paymentDetails: paymentDetails,
+//       createdAt: new Date(),
+//       updatedAt: new Date()
+//     });
+
+//     const savedCampaign = await campaign.save();
+    
+//     console.log('Saved batch with payment details:', savedCampaign.paymentDetails.length);
+    
+//     // ✅ Update user's daily usage count
+//     const contactCount = contacts?.length || 0;
+    
+//     if (contactCount > 0) {
+//       // Find the user
+//       const user = await User.findOne({ phone: userPhone });
+      
+//       if (user && user.plans && user.plans.length > 0) {
+//         // Get today's date (start of day)
+//         const today = new Date();
+//         today.setHours(0, 0, 0, 0);
+        
+//         // Find the active plan
+//         const activePlanIndex = user.plans.findIndex(plan => plan.isActive === true);
+        
+//         if (activePlanIndex !== -1) {
+//           const activePlan = user.plans[activePlanIndex];
+          
+//           // Check if today's usage record exists
+//           const todayUsageIndex = activePlan.dailyUsage.findIndex(usage => {
+//             const usageDate = new Date(usage.date);
+//             usageDate.setHours(0, 0, 0, 0);
+//             return usageDate.getTime() === today.getTime();
+//           });
+          
+//           if (todayUsageIndex !== -1) {
+//             // Update existing daily usage
+//             user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsedCount += contactCount;
+            
+//             // Check if daily limit reached (if msgperday is set)
+//             const dailyLimit = parseInt(activePlan.msgperday) || 0;
+//             if (dailyLimit > 0 && user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsedCount >= dailyLimit) {
+//               user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsageStatus = 'reached';
+//             }
+//           } else {
+//             // Create new daily usage record for today
+//             user.plans[activePlanIndex].dailyUsage.push({
+//               date: today,
+//               dailyUsedCount: contactCount,
+//               dailyUsageStatus: 'active'
+//             });
+//           }
+          
+//           // Save the updated user
+//           await user.save();
+//           console.log(`✅ Updated daily usage for user ${userPhone}: +${contactCount} contacts`);
+//         } else {
+//           console.log('⚠️ No active plan found for user');
+//         }
+//       } else {
+//         console.log('⚠️ User not found or has no plans');
+//       }
+//     }
+    
+//     res.json({
+//       success: true,
+//       campaign: savedCampaign,
+//       message: `Batch ${batchNumber} saved successfully with ${paymentDetails.length} payment details`,
+//       dailyUsageUpdated: contactCount > 0
+//     });
+//   } catch (error) {
+//     console.error('Error saving batch campaign:', error);
+//     res.status(500).json({
+//       success: false,
+//       error: 'Failed to save batch campaign',
+//       details: error.message
+//     });
+//   }
+// });
+
+
+
+// app.post('/api/campaigns/batch', async (req, res) => {
+//   try {
+//     const {
+//       campaignName,
+//       templateName,
+//       phoneNumberId,
+//       headerType,
+//       contacts,
+//       messageDetails,
+//       status,
+//       userPhone,
+//       batchNumber,
+//       parentCampaign,
+//       stats
+//     } = req.body;
+
+//     // Extract payment details from original campaign
+//     const originalCampaign = await CampaignPayment.findOne({
+//       campaignName: parentCampaign,
+//       userPhone: userPhone,
+//       paymentDetails: { $exists: true, $ne: [] }
+//     }).sort({ createdAt: -1 });
+    
+//     console.log('Found original campaign:', originalCampaign ? 'Yes' : 'No');
+//     console.log('Payment details found:', originalCampaign?.paymentDetails?.length || 0);
+
+//     // Extract campaignId and payment details
+//     const campaignId = originalCampaign?.campaignId;
+//     console.log('Using campaignId:', campaignId);
+//     const paymentDetails = originalCampaign?.paymentDetails || [];
+    
+//     const campaign = new Campaign({
+//       campaignId: campaignId,
+//       campaignName,
+//       templateName,
+//       phoneNumberId,
+//       headerType,
+//       contacts: contacts || [],
+//       messageDetails: messageDetails || [],
+//       status,
+//       userPhone,
+//       batchNumber,
+//       parentCampaign,
+//       stats,
+//       paymentDetails: paymentDetails,
+//       createdAt: new Date(),
+//       updatedAt: new Date()
+//     });
+
+//     const savedCampaign = await campaign.save();
+    
+//     console.log('Saved batch with payment details:', savedCampaign.paymentDetails.length);
+    
+//     // ✅ Update user's daily usage count
+//     const contactCount = contacts?.length || 0;
+    
+//     if (contactCount > 0) {
+//       // Find the user
+//       const user = await User.findOne({ phone: userPhone });
+      
+//       if (user && user.plans && user.plans.length > 0) {
+//         // Get today's date (start of day) - normalize to midnight
+//         const today = new Date();
+//         today.setHours(0, 0, 0, 0);
+        
+//         // Find the active plan
+//         const activePlanIndex = user.plans.findIndex(plan => plan.isActive === true);
+        
+//         if (activePlanIndex !== -1) {
+//           const activePlan = user.plans[activePlanIndex];
+          
+//           // Check if today's usage record exists
+//           const todayUsageIndex = activePlan.dailyUsage.findIndex(usage => {
+//             const usageDate = new Date(usage.date);
+//             usageDate.setHours(0, 0, 0, 0);
+//             return usageDate.getTime() === today.getTime();
+//           });
+          
+//           if (todayUsageIndex !== -1) {
+//             // ✅ Update existing daily usage for the same day
+//             user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsedCount += contactCount;
+            
+//             // Check if daily limit reached (if msgperday is set)
+//             const dailyLimit = parseInt(activePlan.msgperday) || 0;
+//             if (dailyLimit > 0 && user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsedCount >= dailyLimit) {
+//               user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsageStatus = 'reached';
+//             }
+            
+//             console.log(`✅ Updated existing record for ${today.toISOString().split('T')[0]}: ${user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsedCount} total`);
+//           } else {
+//             // ✅ Create new daily usage record for new day
+//             user.plans[activePlanIndex].dailyUsage.push({
+//               date: today,
+//               dailyUsedCount: contactCount,
+//               dailyUsageStatus: 'active'
+//             });
+            
+//             console.log(`✅ Created new record for ${today.toISOString().split('T')[0]}: ${contactCount} contacts`);
+//           }
+          
+//           // ✅ Calculate overall usage: totalbroadcasts - sum of all dailyUsedCount
+//           const totalBroadcasts = parseInt(activePlan.totalbroadcasts) || 0;
+//           const totalUsedCount = activePlan.dailyUsage.reduce((sum, usage) => {
+//             return sum + (usage.dailyUsedCount || 0);
+//           }, 0);
+          
+//           // Overall usage = remaining broadcasts
+//           user.plans[activePlanIndex].overallusage = String(totalBroadcasts - totalUsedCount);
+          
+//           console.log(`📊 Overall Usage Calculation:`);
+//           console.log(`   Total Broadcasts: ${totalBroadcasts}`);
+//           console.log(`   Total Used: ${totalUsedCount}`);
+//           console.log(`   Remaining (overallusage): ${user.plans[activePlanIndex].overallusage}`);
+          
+//           // Save the updated user
+//           await user.save();
+//           console.log(`✅ Updated daily usage for user ${userPhone}: +${contactCount} contacts`);
+//         } else {
+//           console.log('⚠️ No active plan found for user');
+//         }
+//       } else {
+//         console.log('⚠️ User not found or has no plans');
+//       }
+//     }
+    
+//     res.json({
+//       success: true,
+//       campaign: savedCampaign,
+//       message: `Batch ${batchNumber} saved successfully with ${paymentDetails.length} payment details`,
+//       dailyUsageUpdated: contactCount > 0
+//     });
+//   } catch (error) {
+//     console.error('Error saving batch campaign:', error);
+//     res.status(500).json({
+//       success: false,
+//       error: 'Failed to save batch campaign',
+//       details: error.message
 //     });
 //   }
 // });
@@ -3787,25 +4080,23 @@ app.post('/api/campaigns/batch', async (req, res) => {
       stats
     } = req.body;
 
-
-
- 
     // Extract payment details from original campaign
+    const originalCampaign = await CampaignPayment.findOne({
+      campaignName: parentCampaign,
+      userPhone: userPhone,
+      paymentDetails: { $exists: true, $ne: [] }
+    }).sort({ createdAt: -1 });
     
-const originalCampaign = await CampaignPayment.findOne({
-  campaignName: parentCampaign,
-  userPhone: userPhone,
-  paymentDetails: { $exists: true, $ne: [] }
-}).sort({ createdAt: -1 });
-   console.log('Found original campaign:', originalCampaign ? 'Yes' : 'No');
+    console.log('Found original campaign:', originalCampaign ? 'Yes' : 'No');
     console.log('Payment details found:', originalCampaign?.paymentDetails?.length || 0);
 
-// Extract campaignId and payment details
-const campaignId = originalCampaign?.campaignId;
-console.log('Using campaignId:', campaignId);
-const paymentDetails = originalCampaign?.paymentDetails || [];
+    // Extract campaignId and payment details
+    const campaignId = originalCampaign?.campaignId;
+    console.log('Using campaignId:', campaignId);
+    const paymentDetails = originalCampaign?.paymentDetails || [];
+    
     const campaign = new Campaign({
-       campaignId: campaignId,
+      campaignId: campaignId,
       campaignName,
       templateName,
       phoneNumberId,
@@ -3817,7 +4108,7 @@ const paymentDetails = originalCampaign?.paymentDetails || [];
       batchNumber,
       parentCampaign,
       stats,
-      paymentDetails: paymentDetails, // Include payment details in batch
+      paymentDetails: paymentDetails,
       createdAt: new Date(),
       updatedAt: new Date()
     });
@@ -3826,10 +4117,95 @@ const paymentDetails = originalCampaign?.paymentDetails || [];
     
     console.log('Saved batch with payment details:', savedCampaign.paymentDetails.length);
     
+    // ✅ Update user's daily usage count
+    const contactCount = contacts?.length || 0;
+    
+    if (contactCount > 0) {
+      // Find the user
+      const user = await User.findOne({ phone: userPhone });
+      
+      if (user && user.plans && user.plans.length > 0) {
+        // Get today's date (start of day) - normalize to midnight
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        // Find the active plan
+        const activePlanIndex = user.plans.findIndex(plan => plan.isActive === true);
+        
+        if (activePlanIndex !== -1) {
+          const activePlan = user.plans[activePlanIndex];
+          
+          // Check if today's usage record exists
+          const todayUsageIndex = activePlan.dailyUsage.findIndex(usage => {
+            const usageDate = new Date(usage.date);
+            usageDate.setHours(0, 0, 0, 0);
+            return usageDate.getTime() === today.getTime();
+          });
+          
+          // Get daily message limit from plan
+          const dailyLimit = parseInt(activePlan.msgperday) || 0;
+          
+          if (todayUsageIndex !== -1) {
+            // ✅ Update existing daily usage for the same day
+            user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsedCount += contactCount;
+            
+            const updatedCount = user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsedCount;
+            
+            // ✅ Check if daily limit reached or exceeded
+            if (dailyLimit > 0 && updatedCount >= dailyLimit) {
+              user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsageStatus = 'reached';
+              console.log(`⚠️ Daily limit reached for ${today.toISOString().split('T')[0]}: ${updatedCount}/${dailyLimit}`);
+            } else {
+              user.plans[activePlanIndex].dailyUsage[todayUsageIndex].dailyUsageStatus = 'active';
+              console.log(`✅ Updated existing record for ${today.toISOString().split('T')[0]}: ${updatedCount}/${dailyLimit || 'unlimited'}`);
+            }
+          } else {
+            // ✅ Create new daily usage record for new day
+            const newUsageStatus = (dailyLimit > 0 && contactCount >= dailyLimit) ? 'reached' : 'active';
+            
+            user.plans[activePlanIndex].dailyUsage.push({
+              date: today,
+              dailyUsedCount: contactCount,
+              dailyUsageStatus: newUsageStatus
+            });
+            
+            if (newUsageStatus === 'reached') {
+              console.log(`⚠️ Daily limit reached on creation for ${today.toISOString().split('T')[0]}: ${contactCount}/${dailyLimit}`);
+            } else {
+              console.log(`✅ Created new record for ${today.toISOString().split('T')[0]}: ${contactCount}/${dailyLimit || 'unlimited'}`);
+            }
+          }
+          
+          // ✅ Calculate overall usage: totalbroadcasts - sum of all dailyUsedCount
+          const totalBroadcasts = parseInt(activePlan.totalbroadcasts) || 0;
+          const totalUsedCount = activePlan.dailyUsage.reduce((sum, usage) => {
+            return sum + (usage.dailyUsedCount || 0);
+          }, 0);
+          
+          // Overall usage = remaining broadcasts
+          user.plans[activePlanIndex].overallusage = String(totalBroadcasts - totalUsedCount);
+          
+          console.log(`📊 Overall Usage Calculation:`);
+          console.log(`   Total Broadcasts: ${totalBroadcasts}`);
+          console.log(`   Total Used: ${totalUsedCount}`);
+          console.log(`   Remaining (overallusage): ${user.plans[activePlanIndex].overallusage}`);
+          
+          // Save the updated user
+          await user.save();
+          console.log(`✅ Updated daily usage for user ${userPhone}: +${contactCount} contacts`);
+        } else {
+          console.log('⚠️ No active plan found for user');
+        }
+      } else {
+        console.log('⚠️ User not found or has no plans');
+      }
+    }
+    
     res.json({
       success: true,
       campaign: savedCampaign,
-      message: `Batch ${batchNumber} saved successfully with ${paymentDetails.length} payment details`
+      message: `Batch ${batchNumber} saved successfully with ${paymentDetails.length} payment details`,
+      dailyUsageUpdated: contactCount > 0
     });
   } catch (error) {
     console.error('Error saving batch campaign:', error);
@@ -3840,7 +4216,6 @@ const paymentDetails = originalCampaign?.paymentDetails || [];
     });
   }
 });
-// 3. Route for resending failed messages
 app.post('/api/campaigns/resend-failed', async (req, res) => {
   try {
     const { campaignId, failedMessages, accessToken, phoneNumberId } = req.body;
@@ -5435,10 +5810,10 @@ async function sendWhatsApp(formData) {
       `https://graph.facebook.com/v17.0/${process.env.PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: "whatsapp",
-        to: "919591836976",  // 👈 Receiver
+        to: "919148063021",  // 👈 Receiver
         type: "template",
         template: {
-          name: "contact_form_new", // 👈 Your approved template name
+          name: "form_contact", // 👈 Your approved template name
           language: { code: "en_US" },
 components: [
   {
@@ -5530,7 +5905,29 @@ app.get('/api/profile', async (req, res) => {
         state: '',
         pincode: '',
         country: 'India'
-      }
+      },
+       plans: user.plans.map(plan => ({
+        selectedPlan: plan.selectedPlan || '',
+        planTitle: plan.planTitle,
+        planPrice: plan.planPrice,
+        billingCycle: plan.billingCycle,
+        validity: plan.validity,
+        msgperday: plan.msgperday || '',
+        totalbroadcasts: plan.totalbroadcasts || '',
+        purchaseDate: plan.purchaseDate,
+        isActive: plan.isActive,
+        paymentId: plan.paymentId,
+        overallusage: plan.overallusage || 0,
+        paymentStatus: plan.paymentStatus,
+
+        // ✅ Add daily usage (safe check for missing data)
+        dailyUsage: plan.dailyUsage?.map(usage => ({
+          date: usage.date,
+          dailyUsedCount: usage.dailyUsedCount,
+          dailyUsageStatus: usage.dailyUsageStatus
+        })) || []
+      })),
+
     };
 
     res.json({ 
@@ -5718,249 +6115,417 @@ app.get('/api/dashboard', async (req, res) => {
 
 
 
-const PricingPlanSchema = new mongoose.Schema({
-  planId: { type: String, required: true, unique: true },
-  planTitle: { type: String, required: true },
-  price: { type: Number, required: true },
-  timeline: { type: String, required: true },
-  durationInDays: { type: Number, required: true },
-  description: { type: String, required: true },
-  features: [{
-    label: { type: String, required: true },
-    isActive: { type: Boolean, default: true }
-  }],
-  dynamicFields: [{
-    id: { type: String, required: true },
-    label: { type: String, required: true },
-    content: { type: String, required: true },
-    displayType: { type: String, enum: ['single', 'points'], required: true }
-  }],
-  isActive: { type: Boolean, default: true },
-  order: { type: Number, default: 0 }
-}, { timestamps: true });
+// const PricingPlanSchema = new mongoose.Schema({
+//   planId: { type: String, required: true, unique: true },
+//   planTitle: { type: String, required: true },
+//   price: { type: Number, required: true },
+//   timeline: { type: String, required: true },
+//   durationInDays: { type: Number, required: true },
+//   description: { type: String, required: true },
+//   features: [{
+//     label: { type: String, required: true },
+//     isActive: { type: Boolean, default: true }
+//   }],
+//   dynamicFields: [{
+//     id: { type: String, required: true },
+//     label: { type: String, required: true },
+//     content: { type: String, required: true },
+//     displayType: { type: String, enum: ['single', 'points'], required: true }
+//   }],
+//   isActive: { type: Boolean, default: true },
+//   order: { type: Number, default: 0 }
+// }, { timestamps: true });
 
-// Schema for Contact Tiers (Essentials Plan)
-const ContactTierSchema = new mongoose.Schema({
-  contacts: { type: Number, required: true, unique: true },
-  price: { type: Number, required: true },
-  heading: { type: String, },
-  features: [{ type: String }],
-  additionalfeatures: [{
-    title: { type: String, required: true },
-    items: [{ type: String }]
-  }],
-}, { timestamps: true });
+// // Schema for Contact Tiers (Essentials Plan)
+// const ContactTierSchema = new mongoose.Schema({
+//   contacts: { type: Number, required: true, unique: true },
+//   price: { type: Number, required: true },
+//   heading: { type: String, },
+//   features: [{ type: String }],
+//   additionalfeatures: [{
+//     title: { type: String, required: true },
+//     items: [{ type: String }]
+//   }],
+// }, { timestamps: true });
 
-// Shared Features Schema (for Essentials and Premium)
-const SharedFeaturesSchema = new mongoose.Schema({
-  type: { type: String, enum: ['advanced', 'premium'], required: true },
-  features: [{ type: String }]
-}, { timestamps: true });
+// // Shared Features Schema (for Essentials and Premium)
+// const SharedFeaturesSchema = new mongoose.Schema({
+//   type: { type: String, enum: ['advanced', 'premium'], required: true },
+//   features: [{ type: String }]
+// }, { timestamps: true });
 
-// Models
-const PricingPlan = mongoose.model('PricingPlan', PricingPlanSchema);
-const ContactTier = mongoose.model('ContactTier', ContactTierSchema);
-const SharedFeatures = mongoose.model('SharedFeatures', SharedFeaturesSchema);
+// // Models
+// const PricingPlan = mongoose.model('PricingPlan', PricingPlanSchema);
+// const ContactTier = mongoose.model('ContactTier', ContactTierSchema);
+// const SharedFeatures = mongoose.model('SharedFeatures', SharedFeaturesSchema);
 
-// ==================== PRICING PLANS ROUTES ====================
+// // ==================== PRICING PLANS ROUTES ====================
 
-// GET all pricing plans
-app.get('/api/pricing-plans', async (req, res) => {
-  try {
-    const plans = await PricingPlan.find().sort({ order: 1 });
-    res.json(plans);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+// // GET all pricing plans
+// app.get('/api/pricing-plans', async (req, res) => {
+//   try {
+//     const plans = await PricingPlan.find().sort({ order: 1 });
+//     res.json(plans);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
-// GET single pricing plan
-app.get('/api/pricing-plans/:id', async (req, res) => {
-  try {
-    const plan = await PricingPlan.findById(req.params.id);
-    if (!plan) {
-      return res.status(404).json({ message: 'Plan not found' });
-    }
-    res.json(plan);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+// // GET single pricing plan
+// app.get('/api/pricing-plans/:id', async (req, res) => {
+//   try {
+//     const plan = await PricingPlan.findById(req.params.id);
+//     if (!plan) {
+//       return res.status(404).json({ message: 'Plan not found' });
+//     }
+//     res.json(plan);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
-// POST create new pricing plan
-app.post('/api/pricing-plans', async (req, res) => {
-  try {
-    const plan = new PricingPlan(req.body);
-    const savedPlan = await plan.save();
-    res.status(201).json(savedPlan);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
+// // POST create new pricing plan
+// app.post('/api/pricing-plans', async (req, res) => {
+//   try {
+//     const plan = new PricingPlan(req.body);
+//     const savedPlan = await plan.save();
+//     res.status(201).json(savedPlan);
+//   } catch (error) {
+//     res.status(400).json({ message: error.message });
+//   }
+// });
 
-// PUT update pricing plan
-app.put('/api/pricing-plans/:id', async (req, res) => {
-  try {
-    const updatedPlan = await PricingPlan.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!updatedPlan) {
-      return res.status(404).json({ message: 'Plan not found' });
-    }
-    res.json(updatedPlan);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
+// // PUT update pricing plan
+// app.put('/api/pricing-plans/:id', async (req, res) => {
+//   try {
+//     const updatedPlan = await PricingPlan.findByIdAndUpdate(
+//       req.params.id,
+//       req.body,
+//       { new: true, runValidators: true }
+//     );
+//     if (!updatedPlan) {
+//       return res.status(404).json({ message: 'Plan not found' });
+//     }
+//     res.json(updatedPlan);
+//   } catch (error) {
+//     res.status(400).json({ message: error.message });
+//   }
+// });
 
-// DELETE pricing plan
-app.delete('/api/pricing-plans/:id', async (req, res) => {
-  try {
-    const deletedPlan = await PricingPlan.findByIdAndDelete(req.params.id);
-    if (!deletedPlan) {
-      return res.status(404).json({ message: 'Plan not found' });
-    }
-    res.json({ message: 'Plan deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+// // DELETE pricing plan
+// app.delete('/api/pricing-plans/:id', async (req, res) => {
+//   try {
+//     const deletedPlan = await PricingPlan.findByIdAndDelete(req.params.id);
+//     if (!deletedPlan) {
+//       return res.status(404).json({ message: 'Plan not found' });
+//     }
+//     res.json({ message: 'Plan deleted successfully' });
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
-// ==================== CONTACT TIERS ROUTES ====================
+// // ==================== CONTACT TIERS ROUTES ====================
 
-// GET all contact tiers
-app.get('/api/contact-tiers', async (req, res) => {
-  try {
-    const tiers = await ContactTier.find().sort({ contacts: 1 });
-    res.json(tiers);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+// // GET all contact tiers
+// app.get('/api/contact-tiers', async (req, res) => {
+//   try {
+//     const tiers = await ContactTier.find().sort({ contacts: 1 });
+//     res.json(tiers);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
-// GET single contact tier
-app.get('/api/contact-tiers/:id', async (req, res) => {
-  try {
-    const tier = await ContactTier.findById(req.params.id);
-    if (!tier) {
-      return res.status(404).json({ message: 'Tier not found' });
-    }
-    res.json(tier);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+// // GET single contact tier
+// app.get('/api/contact-tiers/:id', async (req, res) => {
+//   try {
+//     const tier = await ContactTier.findById(req.params.id);
+//     if (!tier) {
+//       return res.status(404).json({ message: 'Tier not found' });
+//     }
+//     res.json(tier);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
-// GET contact tier by contact count
-app.get('/api/contact-tiers/by-contacts/:contacts', async (req, res) => {
-  try {
-    const tier = await ContactTier.findOne({ contacts: req.params.contacts });
-    if (!tier) {
-      return res.status(404).json({ message: 'Tier not found' });
-    }
-    res.json(tier);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+// // GET contact tier by contact count
+// app.get('/api/contact-tiers/by-contacts/:contacts', async (req, res) => {
+//   try {
+//     const tier = await ContactTier.findOne({ contacts: req.params.contacts });
+//     if (!tier) {
+//       return res.status(404).json({ message: 'Tier not found' });
+//     }
+//     res.json(tier);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
-// POST create new contact tier
-app.post('/api/contact-tiers', async (req, res) => {
-  try {
-    const tier = new ContactTier(req.body);
-    console.log("tier",tier)
-    const savedTier = await tier.save();
-    res.status(201).json(savedTier);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
+// // POST create new contact tier
+// app.post('/api/contact-tiers', async (req, res) => {
+//   try {
+//     const tier = new ContactTier(req.body);
+//     console.log("tier",tier)
+//     const savedTier = await tier.save();
+//     res.status(201).json(savedTier);
+//   } catch (error) {
+//     res.status(400).json({ message: error.message });
+//   }
+// });
 
-// PUT update contact tier
-app.put('/api/contact-tiers/:id', async (req, res) => {
-  try {
-    const updatedTier = await ContactTier.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!updatedTier) {
-      return res.status(404).json({ message: 'Tier not found' });
-    }
-    res.json(updatedTier);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
+// // PUT update contact tier
+// app.put('/api/contact-tiers/:id', async (req, res) => {
+//   try {
+//     const updatedTier = await ContactTier.findByIdAndUpdate(
+//       req.params.id,
+//       req.body,
+//       { new: true, runValidators: true }
+//     );
+//     if (!updatedTier) {
+//       return res.status(404).json({ message: 'Tier not found' });
+//     }
+//     res.json(updatedTier);
+//   } catch (error) {
+//     res.status(400).json({ message: error.message });
+//   }
+// });
 
-// DELETE contact tier
-app.delete('/api/contact-tiers/:id', async (req, res) => {
-  try {
-    const deletedTier = await ContactTier.findByIdAndDelete(req.params.id);
-    if (!deletedTier) {
-      return res.status(404).json({ message: 'Tier not found' });
-    }
-    res.json({ message: 'Tier deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+// // DELETE contact tier
+// app.delete('/api/contact-tiers/:id', async (req, res) => {
+//   try {
+//     const deletedTier = await ContactTier.findByIdAndDelete(req.params.id);
+//     if (!deletedTier) {
+//       return res.status(404).json({ message: 'Tier not found' });
+//     }
+//     res.json({ message: 'Tier deleted successfully' });
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
-// ==================== SHARED FEATURES ROUTES ====================
+// // ==================== SHARED FEATURES ROUTES ====================
 
-// GET shared features by type
-app.get('/api/shared-features/:type', async (req, res) => {
-  try {
-    const features = await SharedFeatures.findOne({ type: req.params.type });
-    if (!features) {
-      return res.status(404).json({ message: 'Features not found' });
-    }
-    res.json(features);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+// // GET shared features by type
+// app.get('/api/shared-features/:type', async (req, res) => {
+//   try {
+//     const features = await SharedFeatures.findOne({ type: req.params.type });
+//     if (!features) {
+//       return res.status(404).json({ message: 'Features not found' });
+//     }
+//     res.json(features);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
-// POST/PUT shared features
-app.post('/api/shared-features', async (req, res) => {
-  try {
-    const { type, features } = req.body;
-    const existingFeatures = await SharedFeatures.findOne({ type });
+// // POST/PUT shared features
+// app.post('/api/shared-features', async (req, res) => {
+//   try {
+//     const { type, features } = req.body;
+//     const existingFeatures = await SharedFeatures.findOne({ type });
     
-    if (existingFeatures) {
-      existingFeatures.features = features;
-      const updated = await existingFeatures.save();
-      res.json(updated);
-    } else {
-      const newFeatures = new SharedFeatures({ type, features });
-      const saved = await newFeatures.save();
-      res.status(201).json(saved);
-    }
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
+//     if (existingFeatures) {
+//       existingFeatures.features = features;
+//       const updated = await existingFeatures.save();
+//       res.json(updated);
+//     } else {
+//       const newFeatures = new SharedFeatures({ type, features });
+//       const saved = await newFeatures.save();
+//       res.status(201).json(saved);
+//     }
+//   } catch (error) {
+//     res.status(400).json({ message: error.message });
+//   }
+// });
 
-// ==================== COMBINED PRICING DATA ROUTE ====================
+// // ==================== COMBINED PRICING DATA ROUTE ====================
 
-// GET complete pricing data for frontend
-app.get('/api/pricing-data', async (req, res) => {
+// // GET complete pricing data for frontend
+// app.get('/api/pricing-data', async (req, res) => {
+//   try {
+//     const plans = await PricingPlan.find({ isActive: true }).sort({ order: 1 });
+//     const contactTiers = await ContactTier.find().sort({ contacts: 1 });
+//     const advancedShared = await SharedFeatures.findOne({ type: 'advanced' });
+//     const premiumShared = await SharedFeatures.findOne({ type: 'premium' });
+
+//     res.json({
+//       plans,
+//       contactTiers,
+//       advancedShared: advancedShared ? advancedShared.features : [],
+//       premiumShared: premiumShared ? premiumShared.features : []
+//     });
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
+
+
+
+
+
+// API Routes
+
+// GET all pricing data
+app.get('/api/pricing/new', async (req, res) => {
   try {
-    const plans = await PricingPlan.find({ isActive: true }).sort({ order: 1 });
-    const contactTiers = await ContactTier.find().sort({ contacts: 1 });
-    const advancedShared = await SharedFeatures.findOne({ type: 'advanced' });
-    const premiumShared = await SharedFeatures.findOne({ type: 'premium' });
-
+    const topPlans = await TopPlan.find().sort({ order: 1, createdAt: 1 });
+    const bottomPlans = await BottomPlan.find().sort({ order: 1, createdAt: 1 });
+    const customSections = await CustomSection.find({ isActive: true }).sort({ order: 1, createdAt: 1 });
+    
     res.json({
-      plans,
-      contactTiers,
-      advancedShared: advancedShared ? advancedShared.features : [],
-      premiumShared: premiumShared ? premiumShared.features : []
+      topPlans,
+      bottomPlans,
+      customSections
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching pricing data:', error);
+    res.status(500).json({ error: 'Failed to fetch pricing data' });
+  }
+});
+
+// GET single plan by ID and type
+app.get('/api/pricing/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    console.log("type,id",type,id)
+    
+    let plan = null;
+    if (type === 'top') {
+      plan = await TopPlan.findById(id);
+    } else if (type === 'bottom') {
+      plan = await BottomPlan.findById(id);
+    } else if (type === 'custom') {
+      plan = await CustomSection.findById(id);
+    } else {
+      return res.status(400).json({ error: 'Invalid plan type' });
+    }
+    
+    if (plan) {
+      res.json(plan);
+    } else {
+      res.status(404).json({ error: 'Plan not found' });
+    }
+  } catch (error) {
+    console.error('Error fetching plan:', error);
+    res.status(500).json({ error: 'Failed to fetch plan' });
+  }
+});
+
+// POST create new plan
+app.post('/api/pricing/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    const planData = req.body;
+    
+    let newPlan;
+    if (type === 'top') {
+      newPlan = new TopPlan(planData);
+    } else if (type === 'bottom') {
+      newPlan = new BottomPlan(planData);
+    } else if (type === 'custom') {
+      newPlan = new CustomSection(planData);
+    } else {
+      return res.status(400).json({ error: 'Invalid plan type' });
+    }
+    
+    await newPlan.save();
+    res.status(201).json(newPlan);
+  } catch (error) {
+    console.error('Error creating plan:', error);
+    res.status(500).json({ error: 'Failed to create plan', details: error.message });
+  }
+});
+
+// PUT update existing plan
+app.put('/api/pricing/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const planData = req.body;
+    
+    let updatedPlan;
+    if (type === 'top') {
+      updatedPlan = await TopPlan.findByIdAndUpdate(
+        id,
+        planData,
+        { new: true, runValidators: true }
+      );
+    } else if (type === 'bottom') {
+      updatedPlan = await BottomPlan.findByIdAndUpdate(
+        id,
+        planData,
+        { new: true, runValidators: true }
+      );
+    } else if (type === 'custom') {
+      updatedPlan = await CustomSection.findByIdAndUpdate(
+        id,
+        planData,
+        { new: true, runValidators: true }
+      );
+    } else {
+      return res.status(400).json({ error: 'Invalid plan type' });
+    }
+    
+    if (updatedPlan) {
+      res.json(updatedPlan);
+    } else {
+      res.status(404).json({ error: 'Plan not found' });
+    }
+  } catch (error) {
+    console.error('Error updating plan:', error);
+    res.status(500).json({ error: 'Failed to update plan', details: error.message });
+  }
+});
+
+// DELETE plan
+app.delete('/api/pricing/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    
+    let deletedPlan;
+    if (type === 'top') {
+      deletedPlan = await TopPlan.findByIdAndDelete(id);
+    } else if (type === 'bottom') {
+      deletedPlan = await BottomPlan.findByIdAndDelete(id);
+    } else if (type === 'custom') {
+      deletedPlan = await CustomSection.findByIdAndDelete(id);
+    } else {
+      return res.status(400).json({ error: 'Invalid plan type' });
+    }
+    
+    if (deletedPlan) {
+      res.json({ message: 'Plan deleted successfully', deletedPlan });
+    } else {
+      res.status(404).json({ error: 'Plan not found' });
+    }
+  } catch (error) {
+    console.error('Error deleting plan:', error);
+    res.status(500).json({ error: 'Failed to delete plan' });
+  }
+});
+
+// Bulk update order
+app.put('/api/pricing/:type/reorder', async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { orders } = req.body; // Array of { id, order }
+    
+    let Model;
+    if (type === 'top') Model = TopPlan;
+    else if (type === 'bottom') Model = BottomPlan;
+    else if (type === 'custom') Model = CustomSection;
+    else return res.status(400).json({ error: 'Invalid plan type' });
+    
+    const updatePromises = orders.map(({ id, order }) => 
+      Model.findByIdAndUpdate(id, { order })
+    );
+    
+    await Promise.all(updatePromises);
+    res.json({ message: 'Order updated successfully' });
+  } catch (error) {
+    console.error('Error updating order:', error);
+    res.status(500).json({ error: 'Failed to update order' });
   }
 });
 app.use(history());
