@@ -50,6 +50,148 @@ app.use((req, res, next) => {
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/Users");
 const whatsappRoutes = require("./routes/whatsapp");
+// app.get("/api/templates/:userPhone", async (req, res) => {
+//   try {
+//     const { userPhone } = req.params;
+//     console.log("Fetching templates for user:", userPhone);
+//     // First, get user's template IDs from MongoDB
+//     const userTemplates = await Template.find({ userPhone });
+    
+//     if (userTemplates.length === 0) {
+//       return res.json({
+//         success: true,
+//         data: []
+//       });
+//     }
+    
+//     // Extract template IDs
+//     const templateIds = userTemplates.map(t => t.templateId);
+    
+//     // Fetch all templates from Meta
+//     const response = await axios.get(
+//       `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
+//       {
+//         headers: {
+//           Authorization: `Bearer ${accessToken}`,
+//         },
+//         params: {
+//           limit: 100,
+//         }
+//       }
+//     );
+    
+//     // Filter only user's templates
+//     const filteredTemplates = response.data.data.filter(template => 
+//       templateIds.includes(template.id)
+//     );
+
+//     res.json({
+//       success: true,
+//       data: filteredTemplates,
+//       paging: response.data.paging || null
+//     });
+//   } catch (err) {
+//     console.error("❌ Error fetching templates:", err.response?.data || err.message);
+//     res.status(500).json({ 
+//       success: false,
+//       error: err.response?.data || err.message 
+//     });
+//   }
+// });
+
+app.get("/api/templates/:userPhone", async (req, res) => {
+  try {
+    const { userPhone } = req.params;
+    const { role } = req.query; // Get role from query parameter
+    
+    console.log(`Fetching templates - Role: ${role}, UserPhone: ${userPhone}`);
+    
+    // Fetch all templates from Meta
+    const response = await axios.get(
+      `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        params: {
+          limit: 100,
+        }
+      }
+    );
+    
+    let allTemplates = response.data.data || [];
+    
+    // If admin, fetch all templates with creator info
+    if (role === 'admin') {
+      // Get all templates from MongoDB
+      const dbTemplates = await Template.find({});
+      
+      // Create a map of templateId -> userPhone
+      const templateUserMap = {};
+      dbTemplates.forEach(t => {
+        templateUserMap[t.templateId] = t.userPhone;
+      });
+      
+      // Get all unique user phones
+      const uniquePhones = [...new Set(dbTemplates.map(t => t.userPhone))];
+      
+      // Fetch user details
+      const users = await User.find({ phone: { $in: uniquePhones } });
+      
+      // Create phone -> name map
+      const phoneNameMap = {};
+      users.forEach(u => {
+        phoneNameMap[u.phone] = `${u.firstname} ${u.lastname}`;
+      });
+      
+      // Add createdBy info to all templates
+      const templatesWithCreator = allTemplates.map(template => {
+        const userPhone = templateUserMap[template.id];
+        return {
+          ...template,
+          createdBy: userPhone ? (phoneNameMap[userPhone] || userPhone) : ''
+        };
+      });
+      
+      return res.json({
+        success: true,
+        data: templatesWithCreator,
+        paging: response.data.paging || null
+      });
+    }
+    
+    // For regular users, filter their templates only
+    const userTemplates = await Template.find({ userPhone });
+    
+    if (userTemplates.length === 0) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+    
+    // Extract template IDs
+    const templateIds = userTemplates.map(t => t.templateId);
+    
+    // Filter only user's templates
+    const filteredTemplates = allTemplates.filter(template => 
+      templateIds.includes(template.id)
+    );
+
+    res.json({
+      success: true,
+      data: filteredTemplates,
+      paging: response.data.paging || null
+    });
+  } catch (err) {
+    console.error("❌ Error fetching templates:", err.response?.data || err.message);
+    res.status(500).json({ 
+      success: false,
+      error: err.response?.data || err.message 
+    });
+  }
+});
+
 app.get('/api/campaigns/status/:campaignId', async (req, res) => {
   try {
     const { campaignId } = req.params;
@@ -143,7 +285,16 @@ app.get('/api/campaigns/status/:campaignId', async (req, res) => {
 });
 app.get('/api/campaigns/detailed', async (req, res) => {
   try {
-    const campaigns = await Campaign.find()
+    const { role, userPhone } = req.query; // fetch from frontend query params
+
+    // 🧠 Build dynamic filter
+    const filter = {};
+    if (role === 'user' && userPhone) {
+      filter.userPhone = userPhone;
+    }
+
+    // Fetch campaigns based on role
+    const campaigns = await Campaign.find(filter)
       .sort({ createdAt: -1 })
       .lean();
     
@@ -660,7 +811,7 @@ app.post("/create-template", upload.single("file"), async (req, res) => {
     buttons,
     bodyVariables
   } = req.body;
-
+console.log("Received button body:", req.body);
   const file = req.file;
 
   // Validation
@@ -938,6 +1089,109 @@ app.post("/create-auth-template", async (req, res) => {
 })
 
 
+
+const templateSchema = new mongoose.Schema({
+  templateName: {
+    type: String,
+    required: true,
+    trim: true,
+    lowercase: true
+  },
+  templateId: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  userPhone: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  category: {
+    type: String,
+    enum: ['MARKETING', 'UTILITY', 'AUTHENTICATION'],
+    default: 'MARKETING'
+  },
+  
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true // Adds createdAt and updatedAt automatically
+});
+
+
+// Index for faster queries
+
+const Template = mongoose.model('Template', templateSchema);
+
+// Save template to database for tracking
+app.post("/save-template-record", async (req, res) => {
+  const { templateName, templateId, userPhone, category } = req.body;
+console.log("Saving template record:", req.body);
+  if (!templateName || !templateId || !userPhone) {
+    return res.status(400).json({ 
+      error: "Template name, ID, and user phone are required" 
+    });
+  }
+
+  try {
+    const template = new Template({
+      templateName: templateName.trim().toLowerCase(),
+      templateId,
+      userPhone,
+      category: category || 'MARKETING',
+      // status: 'PENDING'
+    });
+
+    await template.save();
+    
+    console.log(`✅ Template saved: ${templateName} by ${userPhone}`);
+    
+    res.json({ 
+      success: true, 
+      message: "Template record saved successfully",
+      data: template
+    });
+  } catch (err) {
+    console.error("❌ Error saving template record:", err);
+    
+    // Handle duplicate templateId error
+    if (err.code === 11000) {
+      return res.status(400).json({ 
+        error: "Template ID already exists in database" 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: "Failed to save template record",
+      details: err.message 
+    });
+  }
+});
+
+
+
+// Optional: Get all templates (admin view)
+// app.get("/all-templates", async (req, res) => {
+//   try {
+//     const templates = await Template.find()
+//       .sort({ createdAt: -1 })
+//       .limit(100);
+    
+//     res.json({ 
+//       success: true, 
+//       count: templates.length,
+//       data: templates 
+//     });
+//   } catch (err) {
+//     console.error("Error fetching templates:", err);
+//     res.status(500).json({ 
+//       error: err.message 
+//     });
+//   }
+// });
 // New Endpoint: Fetch Templates
 app.get("/api/templates", async (req, res) => {
   try {
@@ -949,7 +1203,7 @@ app.get("/api/templates", async (req, res) => {
         },
         params: {
           // Optional parameters
-          limit: 100, // Adjust as needed
+          limit: 6000, // Adjust as needed
           // fields: 'id,name,status,category,language,components' // Specify fields if needed
         }
       }
@@ -998,6 +1252,7 @@ app.get("/api/library-templates", async (req, res) => {
     });
   }
 });
+
 // New Endpoint: Get Single Template Details
 app.get("/api/templates/:templateId", async (req, res) => {
   const { templateId } = req.params;
@@ -1029,31 +1284,42 @@ app.get("/api/templates/:templateId", async (req, res) => {
 
 // Delete Template Endpoint
 app.delete("/api/templates/:templateId", async (req, res) => {
-  const { templateId } = req.params;
-  console.log("Deleting template ID:", templateId);
+  const { templateId } = req.params; // This is your HSM_ID
+  console.log("delete",templateId)
+  const { name } = req.query; // Template name should be passed as query param or in body
   try {
     const response = await axios.delete(
-      `https://graph.facebook.com/${apiVersion}/${templateId}`,
+      `https://graph.facebook.com/v16.0/${process.env.WABA_ID}/message_templates`,
       {
+        params: {
+          hsm_id: templateId,
+          name: name,
+        },
         headers: {
-          Authorization: `Bearer ${accessToken}`,
-        }
+          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
+        },
       }
     );
 
+    // Then delete locally
+    const deletedTemplate = await Template.findOneAndDelete({ templateId });
+    if (!deletedTemplate) {
+      return res.status(404).json({ success: false, error: "Template not found in DB" });
+    }
+
     res.json({
       success: true,
-      message: "Template deleted successfully",
-      data: response.data
+      message: "Template deleted from Meta and local DB",
+      data: response.data,
     });
-  } catch (err) {
-    console.error("❌ Error deleting template:", err.response?.data || err.message);
-    res.status(500).json({ 
+  } catch (error) {
+    res.status(500).json({
       success: false,
-      error: err.response?.data || err.message 
+      error: error.response?.data || error.message,
     });
   }
 });
+
 
 // Delete Template by Name (Alternative approach - some APIs prefer template name)
 app.delete("/api/templates/by-name/:templateName", async (req, res) => {
@@ -1464,16 +1730,142 @@ app.delete("/delete-template/:name", async (req, res) => {
 //   }
 // });
 
-app.put("/update-template/:name", upload.single("file"), async (req, res) => {
-  const { name } = req.params;
-  const { newName, headerType, headerText, bodyText, footerText } = req.body;
+// app.put("/update-template/:name", upload.single("file"), async (req, res) => {
+//   const { name } = req.params;
+//   const { newName, headerType, headerText, bodyText, footerText } = req.body;
+//   const file = req.file;
+
+//   try {
+//     let headerComponent = null;
+
+//     if (headerType !== "TEXT" && file) {
+//       // media upload logic ...
+//     } else if (headerType === "TEXT") {
+//       headerComponent = {
+//         type: "HEADER",
+//         format: "TEXT",
+//         text: headerText?.substring(0, 60) || "Header text",
+//       };
+//     }
+
+//     const bodyComponent = { type: "BODY", text: bodyText || "Body text" };
+
+//     const footerComponent =
+//       footerText && footerText.trim() ? { type: "FOOTER", text: footerText.trim() } : null;
+
+//     const components = [headerComponent, bodyComponent];
+//     if (footerComponent) components.push(footerComponent);
+
+//     const templateRes = await axios.post(
+//       `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
+//       {
+//         name: newName || `${name}_v2`,
+//         language: "en_US",
+//         category: "MARKETING",
+//         components,
+//       },
+//       {
+//         headers: { Authorization: `Bearer ${accessToken}` },
+//       }
+//     );
+
+//     res.json({ success: true, data: templateRes.data });
+//   } catch (err) {
+//     console.error("❌ Error updating template:", err.response?.data || err.message);
+//     res.status(500).json({ error: err.response?.data || err.message });
+//   }
+// });
+// app.put("/update-template/:id", upload.single("file"), async (req, res) => {
+//   const { id } = req.params; // Changed from name to id
+//   const { newName, headerType, headerText, bodyText, footerText, isDuplicate } = req.body;
+//   const file = req.file;
+  
+//   try {
+//     let headerComponent = null;
+//     if (headerType !== "TEXT" && file) {
+//       // media upload logic ...
+//     } else if (headerType === "TEXT") {
+//       headerComponent = {
+//         type: "HEADER",
+//         format: "TEXT",
+//         text: headerText?.substring(0, 60) || "Header text",
+//       };
+//     }
+    
+//     const bodyComponent = { type: "BODY", text: bodyText || "Body text" };
+//     const footerComponent =
+//       footerText && footerText.trim() ? { type: "FOOTER", text: footerText.trim() } : null;
+//     const components = [headerComponent, bodyComponent];
+//     if (footerComponent) components.push(footerComponent);
+
+//     let templateRes;
+    
+//     if (isDuplicate === 'true') {
+//       // Create duplicate (new template)
+//       templateRes = await axios.post(
+//         `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
+//         {
+//           name: newName,
+//           language: "en_US",
+//           category: "MARKETING",
+//           components,
+//         },
+//         { headers: { Authorization: `Bearer ${accessToken}` } }
+//       );
+//     } else {
+//       // Try to edit existing template
+//       templateRes = await axios.post(
+//         `https://graph.facebook.com/${apiVersion}/${id}`,
+//         { components },
+//         { headers: { Authorization: `Bearer ${accessToken}` } }
+//       );
+//     }
+    
+//     res.json({ success: true, data: templateRes.data });
+//   } catch (err) {
+//     const errorMessage = err.response?.data?.error?.message || err.message;
+//     const isEditLimitError = errorMessage.includes('edit') || 
+//                             errorMessage.includes('limit') || 
+//                             err.response?.data?.error?.code === 100;
+    
+//     res.status(500).json({ 
+//       error: errorMessage,
+//       isEditLimitExceeded: isEditLimitError 
+//     });
+//   }
+// });
+app.put("/update-template/:id", upload.single("file"), async (req, res) => {
+  const { id } = req.params;
+  const { newName, headerType, headerText, bodyText, footerText, isDuplicate, userPhone } = req.body;
   const file = req.file;
-
+  
   try {
+    // Build header component
     let headerComponent = null;
-
     if (headerType !== "TEXT" && file) {
-      // media upload logic ...
+      // Upload media file
+      const formData = new FormData();
+      formData.append("file", fs.createReadStream(file.path));
+      formData.append("messaging_product", "whatsapp");
+      
+      const uploadRes = await axios.post(
+        `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/media`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...formData.getHeaders(),
+          },
+        }
+      );
+      
+      headerComponent = {
+        type: "HEADER",
+        format: headerType,
+        example: {
+          header_handle: [uploadRes.data.id],
+        },
+      };
     } else if (headerType === "TEXT") {
       headerComponent = {
         type: "HEADER",
@@ -1481,35 +1873,74 @@ app.put("/update-template/:name", upload.single("file"), async (req, res) => {
         text: headerText?.substring(0, 60) || "Header text",
       };
     }
-
+    
+    // Build body and footer components
     const bodyComponent = { type: "BODY", text: bodyText || "Body text" };
-
-    const footerComponent =
-      footerText && footerText.trim() ? { type: "FOOTER", text: footerText.trim() } : null;
-
-    const components = [headerComponent, bodyComponent];
+    const footerComponent = footerText && footerText.trim() 
+      ? { type: "FOOTER", text: footerText.trim() } 
+      : null;
+    
+    const components = [headerComponent, bodyComponent].filter(Boolean);
     if (footerComponent) components.push(footerComponent);
 
-    const templateRes = await axios.post(
-      `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
-      {
-        name: newName || `${name}_v2`,
-        language: "en_US",
-        category: "MARKETING",
-        components,
-      },
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
+    let templateRes;
+    
+    if (isDuplicate === 'true') {
+      // Create duplicate (new template)
+      templateRes = await axios.post(
+        `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`,
+        {
+          name: newName,
+          language: "en_US",
+          category: "MARKETING",
+          components,
+        },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      
+      // Save duplicate template to database
+      if (templateRes.data.id && userPhone) {
+        const duplicateTemplate = new Template({
+          templateName: newName.trim().toLowerCase(),
+          templateId: templateRes.data.id,
+          userPhone,
+          category: 'MARKETING'
+        });
+        await duplicateTemplate.save();
+        console.log(`✅ Duplicate template saved: ${newName} by ${userPhone}`);
       }
-    );
-
-    res.json({ success: true, data: templateRes.data });
+      
+    } else {
+      // Edit existing template
+      templateRes = await axios.post(
+        `https://graph.facebook.com/${apiVersion}/${id}`,
+        { components },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+    }
+    
+    res.json({ 
+      success: true, 
+      data: templateRes.data,
+      message: isDuplicate === 'true' 
+        ? "Duplicate template created successfully" 
+        : "Template updated successfully"
+    });
+    
   } catch (err) {
     console.error("❌ Error updating template:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data || err.message });
+    
+    const errorMessage = err.response?.data?.error?.message || err.message;
+    const isEditLimitError = errorMessage.includes('edit') || 
+                            errorMessage.includes('limit') || 
+                            err.response?.data?.error?.code === 100;
+    
+    res.status(500).json({ 
+      error: errorMessage,
+      isEditLimitExceeded: isEditLimitError 
+    });
   }
 });
-
 
 
 const messageSchema = new mongoose.Schema({
@@ -1907,7 +2338,7 @@ app.post('/api/campaigns/update-status', async (req, res) => {
                             console.log(`✅ Updated message ${status.id} to status: ${status.status}`);
                             
                             // Recalculate campaign statistics
-                            await recalculateCampaignStats(updatedCampaign._id);
+                            //await recalculateCampaignStats(updatedCampaign._id);
                             await updateUserCampaignHistory(updatedCampaign.campaignId);
                             // Process refunds for failed messages (runs for all updates to catch any failed messages)
                             //await processRefundForCampaign(updatedCampaign);
@@ -2306,10 +2737,11 @@ app.post('/api/campaigns/sync-user-history', async (req, res) => {
       // Get campaign details from first batch
       const firstBatch = batches[0];
       const headerType = firstBatch.headerType;
+      const category=firstBatch.category;
       const campaignName = firstBatch.campaignName?.replace(/_batch_\d+$/, '') || firstBatch.parentCampaign || firstBatch.campaignName;
       
       // Refund calculation
-      const refundMultiplier = headerType === "TEXT" ? 0.115 : 0.7846;
+      const refundMultiplier = category === "Marketing" ? 0.9 : 0.25;
       const refundAmount = Math.round(totalFailed * refundMultiplier);
       
       console.log(`Calculated refund for campaign ${campaignId} (${batches.length} batches): ${totalFailed} failed * ${refundMultiplier} = ${refundAmount}`);
@@ -2988,44 +3420,88 @@ app.get('/api/user/refund-balance/:userPhone', async (req, res) => {
 // Route 2: Create Razorpay order
 
 
+// app.post('/api/campaigns/calculate-cost', async (req, res) => {
+//   try {
+//     const { contactCount, headerType } = req.body;
+//     const userPhone = req.body.userPhone || req.headers['user-phone'];
+    
+//     const ratePerContact = headerType === 'TEXT' ? 0.115 : 0.7846;
+    
+// let totalAmount = Math.round(contactCount * ratePerContact);
+
+// const user = await User.findOne({ phone: userPhone });
+
+// // Calculate total refund amount
+// const totalRefund = user?.campaignHistory.reduce((sum, campaign) => {
+//   return sum + (campaign.refundAmount || 0);
+// }, 0) || 0;
+
+// // Apply refund only
+// const refundToApply = Math.min(totalRefund, totalAmount);
+// const finalAmount = totalAmount - refundToApply;  // Remove credits calculation
+
+// res.json({
+//   success: true,
+//   data: {
+//     totalAmount: finalAmount,  // This will be 5 (9-4)
+//     originalAmount: totalAmount,
+//     refundApplied: refundToApply,
+//     contactCount,
+//     headerType,
+//     ratePerContact
+//   }
+// });
+   
+// console.log(`✅ Cost: ₹${totalAmount}, Refunds: ₹${refundToApply}, Credits: ₹${creditsToApply}, To Pay: ₹${finalAmount}`);
+//   } catch (error) {
+//     res.status(500).json({ success: false, error: error.message });
+//   }
+// });
 app.post('/api/campaigns/calculate-cost', async (req, res) => {
   try {
-    const { contactCount, headerType } = req.body;
+    const { contactCount, headerType,category, addonCount = 0, addonCost = 0 } = req.body;
+    console.log("cost data", req.body)
     const userPhone = req.body.userPhone || req.headers['user-phone'];
     
-    const ratePerContact = headerType === 'TEXT' ? 0.115 : 0.7846;
+    const ratePerContact =   category === 'Marketing' ? 0.9 : 0.25;
     
-let totalAmount = Math.round(contactCount * ratePerContact);
+    // Calculate base campaign cost
+    let baseCampaignCost = Math.round(contactCount * ratePerContact);
+    
+    // Add addon cost if exists
+    const totalAmount = baseCampaignCost + addonCost;
 
-const user = await User.findOne({ phone: userPhone });
+    const user = await User.findOne({ phone: userPhone });
 
-// Calculate total refund amount
-const totalRefund = user?.campaignHistory.reduce((sum, campaign) => {
-  return sum + (campaign.refundAmount || 0);
-}, 0) || 0;
+    // Calculate total refund amount
+    const totalRefund = user?.campaignHistory.reduce((sum, campaign) => {
+      return sum + (campaign.refundAmount || 0);
+    }, 0) || 0;
 
-// Apply refund only
-const refundToApply = Math.min(totalRefund, totalAmount);
-const finalAmount = totalAmount - refundToApply;  // Remove credits calculation
+    // Apply refund only to base campaign cost (not addon)
+    const refundToApply = Math.min(totalRefund, baseCampaignCost);
+    const finalAmount = Math.max(0, (baseCampaignCost - refundToApply) + addonCost);
 
-res.json({
-  success: true,
-  data: {
-    totalAmount: finalAmount,  // This will be 5 (9-4)
-    originalAmount: totalAmount,
-    refundApplied: refundToApply,
-    contactCount,
-    headerType,
-    ratePerContact
-  }
-});
+    res.json({
+      success: true,
+      data: {
+        totalAmount: finalAmount,
+        originalAmount: totalAmount,
+        baseCampaignCost: baseCampaignCost,
+        refundApplied: refundToApply,
+        addonCount: addonCount,
+        addonCost: addonCost,
+        contactCount,
+        headerType,
+        ratePerContact
+      }
+    });
    
-console.log(`✅ Cost: ₹${totalAmount}, Refunds: ₹${refundToApply}, Credits: ₹${creditsToApply}, To Pay: ₹${finalAmount}`);
+    console.log(`✅ Base Cost: ₹${baseCampaignCost}, Addon Cost: ₹${addonCost}, Total: ₹${totalAmount}, Refunds: ₹${refundToApply}, Final Pay: ₹${finalAmount}`);
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
 app.post('/api/campaigns/create-order', async (req, res) => {
   try {
     const { 
@@ -3033,6 +3509,7 @@ app.post('/api/campaigns/create-order', async (req, res) => {
       headerType, 
       campaignName, 
       userPhone,
+      category,
       phoneNumberId,
       templateName,
       finalAmount
@@ -3043,7 +3520,7 @@ app.post('/api/campaigns/create-order', async (req, res) => {
       key_secret: process.env.RAZORPAY_KEY_SECRET ? 'Present' : 'Missing'
     });
     // Validation
-    if (!contactCount || !headerType || !campaignName || !userPhone) {
+    if (!contactCount || !headerType || !campaignName || !userPhone ||!category) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: contactCount, headerType, campaignName, userPhone'
@@ -3051,7 +3528,7 @@ app.post('/api/campaigns/create-order', async (req, res) => {
     }
 
     // Calculate amount
-    const ratePerContact = headerType.toUpperCase() === 'TEXT' ? 0.115 : 0.7846;
+    const ratePerContact =   category.toUpperCase() === 'Marketing' ? 0.9 : 0.25;
     const totalAmount = Math.round(finalAmount || (contactCount * ratePerContact)); 
     const amountInPaise = Math.round(totalAmount * 100); // Convert to paise for Razorpay
     
@@ -3351,7 +3828,7 @@ app.post('/api/campaigns/verify-payment', async (req, res) => {
     }
     
     // Calculate payment details
-    const ratePerContact = campaignData.headerType === 'TEXT' ? 0.115 : 0.7846;
+    const ratePerContact = campaignData.category === 'Marketing' ? 0.9 : 0.25;
     const totalAmount = campaignData.contacts ? campaignData.contacts.length * ratePerContact : 0;
 
     // Find user and process refund deduction
@@ -4072,6 +4549,7 @@ app.post('/api/campaigns/batch', async (req, res) => {
       phoneNumberId,
       headerType,
       contacts,
+      category,
       messageDetails,
       status,
       userPhone,
@@ -4079,7 +4557,7 @@ app.post('/api/campaigns/batch', async (req, res) => {
       parentCampaign,
       stats
     } = req.body;
-
+console.log("batch data", req.body)
     // Extract payment details from original campaign
     const originalCampaign = await CampaignPayment.findOne({
       campaignName: parentCampaign,
@@ -4101,6 +4579,7 @@ app.post('/api/campaigns/batch', async (req, res) => {
       templateName,
       phoneNumberId,
       headerType,
+      category,
       contacts: contacts || [],
       messageDetails: messageDetails || [],
       status,
@@ -4183,7 +4662,7 @@ app.post('/api/campaigns/batch', async (req, res) => {
           }, 0);
           
           // Overall usage = remaining broadcasts
-          user.plans[activePlanIndex].overallusage = String(totalBroadcasts - totalUsedCount);
+          user.plans[activePlanIndex].overallusage = String(totalUsedCount);
           
           console.log(`📊 Overall Usage Calculation:`);
           console.log(`   Total Broadcasts: ${totalBroadcasts}`);
@@ -5685,59 +6164,226 @@ const contactSchema = new mongoose.Schema({
   firstName: String,
   lastName: String,
   phone: String,
+  createdBy: { type: String, required: true }, // Store the phone number of the user who created this contact
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' } // Reference to User model
 });
 
 const Contact = mongoose.model("Contact", contactSchema);
 
+
+// Helper function to validate and format phone number
+const validateAndFormatPhone = (phone) => {
+  // Remove all non-digit characters
+  let cleaned = phone.toString().replace(/\D/g, "");
+  
+  // If starts with 91, remove it (we'll add +91 later)
+  if (cleaned.startsWith("91") && cleaned.length > 10) {
+    cleaned = cleaned.substring(2);
+  }
+  
+  // Check if it's exactly 10 digits
+  if (cleaned.length !== 10) {
+    return null;
+  }
+  
+  // Return with +91 prefix
+  return `+91${cleaned}`;
+};
+
 // Save single contact
 app.post("/save-contact", async (req, res) => {
   try {
-    const { firstName, lastName, phone } = req.body;
-    const newContact = new Contact({ firstName, lastName, phone });
+    const { firstName, lastName, phone, userPhone } = req.body;
+    
+    if (!userPhone) {
+      return res.status(400).json({ message: "User phone is required" });
+    }
+
+    // Validate and format phone number
+    const formattedPhone = validateAndFormatPhone(phone);
+    if (!formattedPhone) {
+      return res.status(400).json({ message: "Phone number must be exactly 10 digits" });
+    }
+
+    const user = await User.findOne({ phone: userPhone });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check for duplicate phone number
+    const existingContact = await Contact.findOne({ phone: formattedPhone });
+    if (existingContact) {
+      return res.status(400).json({ 
+        message: `Phone number ${formattedPhone} already exists in contacts` 
+      });
+    }
+
+    const newContact = new Contact({ 
+      firstName, 
+      lastName: lastName || "", 
+      phone: formattedPhone,
+      createdBy: userPhone,
+      userId: user._id
+    });
+    
     await newContact.save();
-    res.json({ message: "Contact saved successfully!" });
+    res.json({ message: "Contact saved successfully!", contact: newContact });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Error saving contact" });
   }
 });
 
-// File upload config
-
-
 // Upload Excel/CSV
 app.post("/upload-contacts", upload.single("file"), async (req, res) => {
   try {
+    const { userPhone } = req.body;
+    
+    if (!userPhone) {
+      return res.status(400).json({ message: "User phone is required" });
+    }
+
+    const user = await User.findOne({ phone: userPhone });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     const filePath = req.file.path;
     const workbook = xlsx.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-console.log("condata",data)
-    // Save contacts
-    for (const row of data) {
-      if (row.firstName && row.phone) {
+
+    let successCount = 0;
+    let failCount = 0;
+    const failedContacts = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      let reason = "";
+      
+      console.log(`Processing row ${i + 1}:`, row);
+      
+      // Check if required fields exist
+      if (!row.firstName || !row.phone) {
+        reason = "Missing required fields (firstName or phone)";
+        failedContacts.push({
+          firstName: row.firstName || "",
+          lastName: row.lastName || "",
+          phone: row.phone ? row.phone.toString() : "",
+          reason
+        });
+        failCount++;
+        console.log(`Row ${i + 1} failed:`, reason);
+        continue;
+      }
+
+      // Validate and format phone number
+      const formattedPhone = validateAndFormatPhone(row.phone);
+      
+      if (!formattedPhone) {
+        reason = "Invalid phone number (must be 10 digits)";
+        failedContacts.push({
+          firstName: row.firstName,
+          lastName: row.lastName || "",
+          phone: row.phone.toString(),
+          reason
+        });
+        failCount++;
+        console.log(`Row ${i + 1} failed:`, reason);
+        continue;
+      }
+      
+      // Check for duplicate phone number
+      const existingContact = await Contact.findOne({ phone: formattedPhone });
+      if (existingContact) {
+        reason = `Duplicate phone number (already exists)`;
+        failedContacts.push({
+          firstName: row.firstName,
+          lastName: row.lastName || "",
+          phone: formattedPhone.replace("+91", ""),
+          reason
+        });
+        failCount++;
+        console.log(`Row ${i + 1} failed:`, reason);
+        continue;
+      }
+      
+      try {
         const contact = new Contact({
           firstName: row.firstName,
           lastName: row.lastName || "",
-          phone: row.phone,
+          phone: formattedPhone,
+          createdBy: userPhone,
+          userId: user._id
         });
         await contact.save();
+        successCount++;
+        console.log(`Row ${i + 1} saved successfully`);
+      } catch (err) {
+        console.error(`Error saving contact row ${i + 1}:`, err);
+        reason = "Database error while saving";
+        failedContacts.push({
+          firstName: row.firstName,
+          lastName: row.lastName || "",
+          phone: formattedPhone.replace("+91", ""),
+          reason
+        });
+        failCount++;
       }
     }
 
-    fs.unlinkSync(filePath); // cleanup
-    res.json({ message: "Contacts uploaded successfully!" });
+    fs.unlinkSync(filePath);
+    
+    let message = `Upload complete! Success: ${successCount}, Failed: ${failCount}`;
+    
+    res.json({ 
+      message,
+      successCount,
+      failCount,
+      failedContacts
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Error uploading contacts" });
   }
 });
 
-// Fetch all contacts
+// Fetch contacts
 app.get("/contacts", async (req, res) => {
   try {
-    const contacts = await Contact.find();
-    res.json(contacts);
+    const { userPhone, role } = req.query;
+    
+    if (!userPhone || !role) {
+      return res.status(400).json({ message: "User phone and role are required" });
+    }
+
+    let contacts;
+    
+    if (role === 'admin') {
+      contacts = await Contact.find()
+        .populate('userId', 'firstname lastname phone email')
+        .sort({ createdAt: -1 });
+      
+      const formattedContacts = contacts.map(contact => ({
+        _id: contact._id,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        phone: contact.phone,
+        createdBy: contact.createdBy,
+        creatorName: contact.userId ? `${contact.userId.firstname} ${contact.userId.lastname}` : 'Unknown',
+        creatorEmail: contact.userId ? contact.userId.email : '',
+        createdAt: contact.createdAt,
+        updatedAt: contact.updatedAt
+      }));
+      
+      res.json(formattedContacts);
+    } else {
+      contacts = await Contact.find({ createdBy: userPhone })
+        .sort({ createdAt: -1 });
+      res.json(contacts);
+    }
   } catch (err) {
+    console.error("Error fetching contacts", err);
     res.status(500).json({ message: "Error fetching contacts" });
   }
 });
@@ -5746,13 +6392,133 @@ app.get("/contacts", async (req, res) => {
 app.put("/contacts/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, phone } = req.body;
-    await Contact.findByIdAndUpdate(id, { firstName, lastName, phone });
+    const { firstName, lastName, phone, userPhone, role } = req.body;
+    
+    const contact = await Contact.findById(id);
+    
+    if (!contact) {
+      return res.status(404).json({ message: "Contact not found" });
+    }
+    
+    if (role !== 'admin' && contact.createdBy !== userPhone) {
+      return res.status(403).json({ message: "You don't have permission to edit this contact" });
+    }
+    
+    // Validate and format phone number
+    const formattedPhone = validateAndFormatPhone(phone);
+    if (!formattedPhone) {
+      return res.status(400).json({ message: "Phone number must be exactly 10 digits" });
+    }
+    
+    // Check for duplicate phone number (excluding current contact)
+    const existingContact = await Contact.findOne({ 
+      phone: formattedPhone,
+      _id: { $ne: id }
+    });
+    
+    if (existingContact) {
+      return res.status(400).json({ 
+        message: `Phone number ${formattedPhone} already exists in contacts` 
+      });
+    }
+    
+    await Contact.findByIdAndUpdate(id, { firstName, lastName, phone: formattedPhone });
     res.json({ message: "Contact updated successfully!" });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Error updating contact" });
   }
 });
+
+// Delete a contact
+app.delete("/contacts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userPhone, role } = req.body;
+    
+    const contact = await Contact.findById(id);
+    
+    if (!contact) {
+      return res.status(404).json({ message: "Contact not found" });
+    }
+    
+    if (role !== 'admin' && contact.createdBy !== userPhone) {
+      return res.status(403).json({ message: "You don't have permission to delete this contact" });
+    }
+    
+    await Contact.findByIdAndDelete(id);
+    res.json({ message: "Contact deleted successfully!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error deleting contact" });
+  }
+});
+
+
+// // Save single contact
+// app.post("/save-contact", async (req, res) => {
+//   try {
+//     const { firstName, lastName, phone } = req.body;
+//     const newContact = new Contact({ firstName, lastName, phone });
+//     await newContact.save();
+//     res.json({ message: "Contact saved successfully!" });
+//   } catch (err) {
+//     res.status(500).json({ message: "Error saving contact" });
+//   }
+// });
+
+// // File upload config
+
+
+// // Upload Excel/CSV
+// app.post("/upload-contacts", upload.single("file"), async (req, res) => {
+//   try {
+//     const filePath = req.file.path;
+//     const workbook = xlsx.readFile(filePath);
+//     const sheetName = workbook.SheetNames[0];
+//     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+// console.log("condata",data)
+//     // Save contacts
+//     for (const row of data) {
+//       if (row.firstName && row.phone) {
+//         const contact = new Contact({
+//           firstName: row.firstName,
+//           lastName: row.lastName || "",
+//           phone: row.phone,
+//         });
+//         await contact.save();
+//       }
+//     }
+
+//     fs.unlinkSync(filePath); // cleanup
+//     res.json({ message: "Contacts uploaded successfully!" });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Error uploading contacts" });
+//   }
+// });
+
+// // Fetch all contacts
+// app.get("/contacts", async (req, res) => {
+//   try {
+//     const contacts = await Contact.find();
+//     res.json(contacts);
+//   } catch (err) {
+//     res.status(500).json({ message: "Error fetching contacts" });
+//   }
+// });
+
+// // Update a contact
+// app.put("/contacts/:id", async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { firstName, lastName, phone } = req.body;
+//     await Contact.findByIdAndUpdate(id, { firstName, lastName, phone });
+//     res.json({ message: "Contact updated successfully!" });
+//   } catch (err) {
+//     res.status(500).json({ message: "Error updating contact" });
+//   }
+// });
 
 
 async function sendEmail(formData) {
@@ -5905,6 +6671,22 @@ app.get('/api/profile', async (req, res) => {
         state: '',
         pincode: '',
         country: 'India'
+      },
+       whatsappBusiness: user.whatsappBusiness ? {
+        metaBusinessId: user.whatsappBusiness.metaBusinessId || '',
+        accountId: user.whatsappBusiness.accountId || '',
+        phoneNumbers: user.whatsappBusiness.phoneNumbers?.map(phoneObj => ({
+          phoneNumberId: phoneObj.phoneNumberId,
+          phoneNumber: phoneObj.phoneNumber,
+          displayName: phoneObj.displayName,
+          verifiedName: phoneObj.verifiedName,
+          isActive: phoneObj.isActive,
+          addedAt: phoneObj.addedAt
+        })) || []
+      } : {
+        metaBusinessId: '',
+        accountId: '',
+        phoneNumbers: []
       },
        plans: user.plans.map(plan => ({
         selectedPlan: plan.selectedPlan || '',

@@ -39,6 +39,8 @@ const CampaignSchema = new mongoose.Schema({
   phoneNumberId: { type: String, required: true },
   templateName: { type: String, required: true },
   headerType: { type: String, required: true },
+   userPhone: { type: String },
+        category: { type: String, required: true },
   paymentDetails: [{
     paymentId: { type: String, required: true }, // Razorpay payment ID
     orderId: { type: String, required: true }, // Razorpay order ID
@@ -46,6 +48,7 @@ const CampaignSchema = new mongoose.Schema({
     currency: { type: String, default: 'INR' },
     contactCount: { type: Number, required: true }, // Number of contacts for this payment
     headerType: { type: String, required: true }, // Header type for this payment
+
     ratePerContact: { type: Number, required: true }, // Rate charged per contact
     paymentStatus: { type: String, enum: ['pending', 'success', 'failed','refund_covered'], default: 'pending' },
     paymentMethod: { type: String }, // card, netbanking, wallet, etc.
@@ -61,7 +64,7 @@ const CampaignSchema = new mongoose.Schema({
   scheduleMode: { type: String },
   fileName: { type: String },
   fileUrl: { type: String },
-  userPhone: { type: String }, // Track user who created campaign
+  // Track user who created campaign
  
   // Enhanced message tracking with detailed error handling
   messageDetails: [{
