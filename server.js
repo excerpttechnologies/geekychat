@@ -6235,6 +6235,119 @@ app.post("/save-contact", async (req, res) => {
 });
 
 // Upload Excel/CSV
+// app.post("/upload-contacts", upload.single("file"), async (req, res) => {
+//   try {
+//     const { userPhone } = req.body;
+    
+//     if (!userPhone) {
+//       return res.status(400).json({ message: "User phone is required" });
+//     }
+
+//     const user = await User.findOne({ phone: userPhone });
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     const filePath = req.file.path;
+//     const workbook = xlsx.readFile(filePath);
+//     const sheetName = workbook.SheetNames[0];
+//     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+//     let successCount = 0;
+//     let failCount = 0;
+//     const failedContacts = [];
+
+//     for (let i = 0; i < data.length; i++) {
+//       const row = data[i];
+//       let reason = "";
+      
+//       console.log(`Processing row ${i + 1}:`, row);
+      
+//       // Check if required fields exist
+//       if (!row.firstName || !row.phone) {
+//         reason = "Missing required fields (firstName or phone)";
+//         failedContacts.push({
+//           firstName: row.firstName || "",
+//           lastName: row.lastName || "",
+//           phone: row.phone ? row.phone.toString() : "",
+//           reason
+//         });
+//         failCount++;
+//         console.log(`Row ${i + 1} failed:`, reason);
+//         continue;
+//       }
+
+//       // Validate and format phone number
+//       const formattedPhone = validateAndFormatPhone(row.phone);
+      
+//       if (!formattedPhone) {
+//         reason = "Invalid phone number (must be 10 digits)";
+//         failedContacts.push({
+//           firstName: row.firstName,
+//           lastName: row.lastName || "",
+//           phone: row.phone.toString(),
+//           reason
+//         });
+//         failCount++;
+//         console.log(`Row ${i + 1} failed:`, reason);
+//         continue;
+//       }
+      
+//       // Check for duplicate phone number
+//       const existingContact = await Contact.findOne({ phone: formattedPhone });
+//       if (existingContact) {
+//         reason = `Duplicate phone number (already exists)`;
+//         failedContacts.push({
+//           firstName: row.firstName,
+//           lastName: row.lastName || "",
+//           phone: formattedPhone.replace("+91", ""),
+//           reason
+//         });
+//         failCount++;
+//         console.log(`Row ${i + 1} failed:`, reason);
+//         continue;
+//       }
+      
+//       try {
+//         const contact = new Contact({
+//           firstName: row.firstName,
+//           lastName: row.lastName || "",
+//           phone: formattedPhone,
+//           createdBy: userPhone,
+//           userId: user._id
+//         });
+//         await contact.save();
+//         successCount++;
+//         console.log(`Row ${i + 1} saved successfully`);
+//       } catch (err) {
+//         console.error(`Error saving contact row ${i + 1}:`, err);
+//         reason = "Database error while saving";
+//         failedContacts.push({
+//           firstName: row.firstName,
+//           lastName: row.lastName || "",
+//           phone: formattedPhone.replace("+91", ""),
+//           reason
+//         });
+//         failCount++;
+//       }
+//     }
+
+//     fs.unlinkSync(filePath);
+    
+//     let message = `Upload complete! Success: ${successCount}, Failed: ${failCount}`;
+    
+//     res.json({ 
+//       message,
+//       successCount,
+//       failCount,
+//       failedContacts
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Error uploading contacts" });
+//   }
+// });
+// Upload Excel/CSV
 app.post("/upload-contacts", upload.single("file"), async (req, res) => {
   try {
     const { userPhone } = req.body;
@@ -6253,6 +6366,12 @@ app.post("/upload-contacts", upload.single("file"), async (req, res) => {
     const sheetName = workbook.SheetNames[0];
     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
+    // Helper function to get values case-insensitively
+    const getValueCaseInsensitive = (obj, key) => {
+      const foundKey = Object.keys(obj).find(k => k.toLowerCase() === key.toLowerCase());
+      return foundKey ? obj[foundKey]?.toString().trim() : '';
+    };
+
     let successCount = 0;
     let failCount = 0;
     const failedContacts = [];
@@ -6263,13 +6382,18 @@ app.post("/upload-contacts", upload.single("file"), async (req, res) => {
       
       console.log(`Processing row ${i + 1}:`, row);
       
+      // Get values case-insensitively
+      const firstName = getValueCaseInsensitive(row, 'firstName');
+      const lastName = getValueCaseInsensitive(row, 'lastName');
+      const phone = getValueCaseInsensitive(row, 'phone');
+
       // Check if required fields exist
-      if (!row.firstName || !row.phone) {
+      if (!firstName || !phone) {
         reason = "Missing required fields (firstName or phone)";
         failedContacts.push({
-          firstName: row.firstName || "",
-          lastName: row.lastName || "",
-          phone: row.phone ? row.phone.toString() : "",
+          firstName: firstName || "",
+          lastName: lastName || "",
+          phone: phone || "",
           reason
         });
         failCount++;
@@ -6278,14 +6402,14 @@ app.post("/upload-contacts", upload.single("file"), async (req, res) => {
       }
 
       // Validate and format phone number
-      const formattedPhone = validateAndFormatPhone(row.phone);
+      const formattedPhone = validateAndFormatPhone(phone);
       
       if (!formattedPhone) {
         reason = "Invalid phone number (must be 10 digits)";
         failedContacts.push({
-          firstName: row.firstName,
-          lastName: row.lastName || "",
-          phone: row.phone.toString(),
+          firstName: firstName,
+          lastName: lastName,
+          phone: phone,
           reason
         });
         failCount++;
@@ -6298,8 +6422,8 @@ app.post("/upload-contacts", upload.single("file"), async (req, res) => {
       if (existingContact) {
         reason = `Duplicate phone number (already exists)`;
         failedContacts.push({
-          firstName: row.firstName,
-          lastName: row.lastName || "",
+          firstName: firstName,
+          lastName: lastName,
           phone: formattedPhone.replace("+91", ""),
           reason
         });
@@ -6310,8 +6434,8 @@ app.post("/upload-contacts", upload.single("file"), async (req, res) => {
       
       try {
         const contact = new Contact({
-          firstName: row.firstName,
-          lastName: row.lastName || "",
+          firstName: firstName,
+          lastName: lastName || "",
           phone: formattedPhone,
           createdBy: userPhone,
           userId: user._id
@@ -6323,8 +6447,8 @@ app.post("/upload-contacts", upload.single("file"), async (req, res) => {
         console.error(`Error saving contact row ${i + 1}:`, err);
         reason = "Database error while saving";
         failedContacts.push({
-          firstName: row.firstName,
-          lastName: row.lastName || "",
+          firstName: firstName,
+          lastName: lastName,
           phone: formattedPhone.replace("+91", ""),
           reason
         });
@@ -6347,7 +6471,6 @@ app.post("/upload-contacts", upload.single("file"), async (req, res) => {
     res.status(500).json({ message: "Error uploading contacts" });
   }
 });
-
 // Fetch contacts
 app.get("/contacts", async (req, res) => {
   try {
@@ -7168,7 +7291,7 @@ app.get('/api/pricing/new', async (req, res) => {
 });
 
 // GET single plan by ID and type
-app.get('/api/pricing/:type/:id', async (req, res) => {
+app.get('/api/pricing/new/:type/:id', async (req, res) => {
   try {
     const { type, id } = req.params;
     console.log("type,id",type,id)
@@ -7196,7 +7319,7 @@ app.get('/api/pricing/:type/:id', async (req, res) => {
 });
 
 // POST create new plan
-app.post('/api/pricing/:type', async (req, res) => {
+app.post('/api/pricing/new/:type', async (req, res) => {
   try {
     const { type } = req.params;
     const planData = req.body;
@@ -7221,7 +7344,7 @@ app.post('/api/pricing/:type', async (req, res) => {
 });
 
 // PUT update existing plan
-app.put('/api/pricing/:type/:id', async (req, res) => {
+app.put('/api/pricing/new/:type/:id', async (req, res) => {
   try {
     const { type, id } = req.params;
     const planData = req.body;
@@ -7261,7 +7384,7 @@ app.put('/api/pricing/:type/:id', async (req, res) => {
 });
 
 // DELETE plan
-app.delete('/api/pricing/:type/:id', async (req, res) => {
+app.delete('/api/pricing/new/:type/:id', async (req, res) => {
   try {
     const { type, id } = req.params;
     

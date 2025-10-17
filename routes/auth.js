@@ -667,7 +667,20 @@ router.post('/register', async (req, res) => {
         country: shippingAddress.country || 'India'
       }
     });
-
+if (isFreeOrZeroPlan) {
+  newUser.whatsappBusiness = {
+    metaBusinessId: '2097623810649198',
+    accountId: '1377314883331309',
+    phoneNumbers: [{
+      phoneNumberId: '760680733799426',
+      phoneNumber: '7406380406',
+      displayName: '',
+      verifiedName: '',
+      isActive: true,
+      addedAt: new Date()
+    }]
+  };
+}
     // Set currentPlan to the first plan's ID after saving
     await newUser.save();
     newUser.currentPlan = newUser.plans[0]._id;
@@ -1067,6 +1080,10 @@ router.get('/download-agreement', (req, res) => {
   res.download(file, 'Agreement-Template.pdf');
 });
 
+router.get('/download-contacttemplate', (req, res) => {
+  const file = path.join(__dirname, '../document/contacttemplates.csv');
+  res.download(file, 'Agreement-Template.pdf');
+});
 
 
 

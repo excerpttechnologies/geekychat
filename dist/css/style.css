@@ -478,7 +478,7 @@ header.fixed .navbar {
 
 .navbar-expand-lg .navbar-nav .nav-link.dark_btn {
     color: var(--text-white);
-    background-color: var(--purple);
+    background-color:#6A49F2;
     font-size: 16px;
     padding: 9px 40px;
     border-radius: 25px;
@@ -901,7 +901,7 @@ header.fixed .navbar {
     margin-top: 120px;
     padding-top: 60px;
     padding-bottom: 20px;
-    box-shadow: 0px 4px 30px #EDE9FE;
+    /* box-shadow: 0px 4px 30px #EDE9FE; */
 }
 
 /* features section image */
@@ -2012,8 +2012,7 @@ footer .top_footer {
     padding: 15px 0 10px 0;
     position: relative;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-    
+    /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); */
 }
 
 footer .top_footer.has_bg {
@@ -2523,7 +2522,7 @@ header.fix_style.white_header {
     background-repeat: no-repeat;
     background-size: cover;
     background-position: center;
-    min-height: 300px;
+    min-height: 200px;
     width: 100%;
     display: flex;
     align-items: center;
@@ -2533,7 +2532,7 @@ header.fix_style.white_header {
 
 .bred_crumb::after {
     content: "";
-    background-image: url(../images/inner_page_banner_overlay.svg);
+    /* background-image: url(../images/inner_page_banner_overlay.svg); */
     position: absolute;
     bottom: -1px;
     left: 0;
@@ -2576,6 +2575,7 @@ header.fix_style.white_header {
     color: var(--text-white);
     font-size: 14px;
     transition: .4s all;
+    text-decoration: auto;
 }
 
 .bred_crumb .bred_text ul li a:hover {
@@ -3637,9 +3637,9 @@ header.fix_style.white_header {
 }
 
 
-
-
-
-
-
-
+@media screen and (min-width: 769px) {
+  .new_responsive_bookcall{
+    margin-left: 70%;
+    width: 30% !important;
+  }  
+}

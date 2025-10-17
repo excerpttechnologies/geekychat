@@ -25,6 +25,8 @@
     }
 }
 
+
+
 @media screen and (max-width:1300px) {
     /* features section */
     .features_section .feature_detail .feature_box {
@@ -838,6 +840,7 @@
     }
     footer .go_top {
         right: 10px;
+        top: 500px;
     }
     footer .top_footer .col-md-6 {
         margin-bottom: 0px;
@@ -861,7 +864,7 @@
     }
     /* Bread-Crumb */
     .bred_crumb {
-        min-height: 330px;
+        min-height: 100px;
     }
     .bred_crumb .bred_text h1 {
         font-size: 24px;
@@ -1047,6 +1050,8 @@
     .map_section {
         margin: 15px 0;
     }
+
+    
 }
 
 @media screen and (max-width:640px) {
